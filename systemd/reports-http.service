@@ -1,0 +1,9 @@
+[Unit]
+Description=Static server for ~/reports (proxied over Tailscale at /reports)
+
+[Service]
+ExecStart=/usr/bin/python3 -m http.server 8787 --bind 127.0.0.1 --directory %h/reports
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

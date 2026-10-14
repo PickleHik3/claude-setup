@@ -13,7 +13,7 @@ for f in "$R"/agents/*.md; do link "agents/$(basename "$f")" ~/.claude/agents/"$
 link hooks/model-gate.py ~/.claude/hooks/model-gate.py
 for s in "$R"/skills/*/; do s="$(basename "$s")"; link "skills/$s" ~/.claude/skills/"$s"; done
 link bin/agent-tidy ~/.local/bin/agent-tidy
-for u in agent-tidy.service agent-tidy.timer; do link "systemd/$u" ~/.config/systemd/user/"$u"; done
+for u in agent-tidy.service agent-tidy.timer reports-http.service; do link "systemd/$u" ~/.config/systemd/user/"$u"; done
 [ -f ~/.config/ad/targets ] || { mkdir -p ~/.config/ad; cp "$R/ad/targets.example" ~/.config/ad/targets; echo "edit ~/.config/ad/targets"; }
 
 # Third-party skills, fetched from their own repos rather than republished here.
@@ -28,4 +28,6 @@ fetch_skill imagegen-frontend https://github.com/Yu-369/VibeCurb skills/imagegen
 
 sudo install -Dm644 "$R/managed-settings.json" /etc/claude-code/managed-settings.json
 systemctl --user daemon-reload
+systemctl --user enable --now reports-http.service
+tailscale serve --bg --set-path /reports http://127.0.0.1:8787 || echo "tailscale serve failed: run 'sudo tailscale set --operator=$USER' once, then re-run"
 echo "done. The agent-tidy timer is off: systemctl --user enable --now agent-tidy.timer"
