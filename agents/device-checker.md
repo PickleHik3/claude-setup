@@ -13,7 +13,9 @@ You have not seen the code and you do not want to: judge only what the screen sh
 Setup
 - Read the app's `docs/agents/device-map.md` if its repository has one, and navigate by it.
 - Take the device's lease first (`ad -s DEVICE lease acquire "<what you are checking>"`), and
-  release it when you finish, whatever happened. Start the emulator only under your lease.
+  release it when you finish, whatever happened. Start the emulator only under your lease. If
+  `ad -s DEVICE lease status` shows another session holding it for more than about 30 minutes,
+  report every check BLOCKED at once instead of waiting; never take a lease over.
 - Run nothing in the background, or stop it before you report: no recording, logcat follower,
   polling loop or goal agent may outlive your report. Report only when nothing of yours is running.
 - Install the build you were given; check it launched (`top`, `crash`).
