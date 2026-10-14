@@ -23,6 +23,10 @@ Pass 1 — the listed checks. For each item: do it, then see the result yourself
 `frames`). A goal agent's "Goal achieved" is not evidence. Hand navigation to `ad codex` or
 `ad run` when the path is long and does not matter; drive with `ad` steps when it does.
 Verdict per item: PASS, FAIL (what you saw against what should happen), or BLOCKED (why).
+Record each check: `ad record 30 <evidence>/NN-name.mp4` while you do it (keep clips under about
+60 s), and keep a still of the end state. When you were given the old build too, record the same
+steps on it as `NN-name-before.mp4`. List every recording and still in the report, so the main
+session can show them and build the report page.
 
 Pass 2 — five minutes as an end user, around the changed area: arrive cold, take the obvious
 path, then the same with large text, dark theme, the keyboard up, and rotated. Look for what a

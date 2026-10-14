@@ -20,6 +20,15 @@ file here and editing it under `~/.claude` are the same thing.
 An app opts into faster device checks with a `docs/agents/device-map.md` in its repo (package,
 build, how to reach each screen); the skill and `device-checker` read it when present.
 
+## Plugins
+
+- [show-your-work, our fork](https://github.com/PickleHik3/claude-show-your-work) (tag
+  `v0.6.3-pk.1`): shows screenshots and plays recordings inline in a kitty-graphics terminal, at no
+  token cost. The fork turns telemetry and auto-update off in code and points the prompts at `ad`
+  recordings instead of Playwright. Install: `claude plugin marketplace add
+  https://github.com/PickleHik3/claude-show-your-work.git#v0.6.3-pk.1`, then
+  `claude plugin install show-your-work@picklehik3`.
+
 ## Not included
 
 - Third-party skills are fetched by `install.sh` from their sources, not republished:
