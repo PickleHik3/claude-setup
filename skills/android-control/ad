@@ -1,0 +1,430 @@
+#!/usr/bin/env bash
+# ad — drive Android devices: pick and connect a device, boot the emulator, look and act fast
+# over adb, set test conditions, read logs. `ad run "goal"` hands a goal to mobilerun.
+# Target: `ad -s NAME|SERIAL|MODEL|emu CMD`, else $ANDROID_SERIAL, else the only device.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TARGETS="${AD_TARGETS:-$HOME/.config/ad/targets}"
+
+# One adb server (5037) for every agent; a private server hides devices from the rest.
+unset ANDROID_ADB_SERVER_PORT ADB_SERVER_SOCKET
+
+die() { echo -e "ad: $*" >&2; exit 1; }
+
+devices() { adb devices -l 2>/dev/null | awk 'NR>1 && $2=="device"'; }
+
+# Address of a named target from $TARGETS ("name host:port"); a host that is not an IP is
+# resolved through Tailscale (MagicDNS names like nothingphone2).
+target_addr() {
+  local host port ip
+  [ -f "$TARGETS" ] || return 1
+  read -r host port <<<"$(awk -v n="$1" '!/^#/ && $1==n {split($2,a,":"); print a[1], a[2]; exit}' "$TARGETS")"
+  [ -n "$host" ] || return 1
+  if [[ "$host" =~ ^[0-9.]+$ ]]; then ip="$host"
+  else ip="$(tailscale ip -4 "$host" 2>/dev/null | head -1)"; [ -n "$ip" ] || die "tailscale cannot resolve '$host' (is it on the tailnet? tailscale status)"; fi
+  echo "$ip:${port:-5555}"
+}
+
+# Connect a named target if it is not already a usable device; drops a stale offline entry.
+connect_target() {
+  local addr="$1" i
+  devices | awk -v a="$addr" '$1==a {f=1} END {exit !f}' && { echo "$addr"; return; }
+  adb disconnect "$addr" >/dev/null 2>&1 || true
+  adb connect "$addr" >/dev/null 2>&1 || true
+  for i in $(seq 1 10); do
+    devices | awk -v a="$addr" '$1==a {f=1} END {exit !f}' && { echo "$addr"; return; }
+    sleep 1
+  done
+  die "cannot reach $addr over adb. On the phone, port 5555 closes on reboot: re-enable it with 'adb tcpip 5555' over USB or wireless debugging"
+}
+
+EMU_SERIAL=emulator-5554   # AVD tl16, run by the user service android-emulator
+
+# Boot the local emulator through its user service (only `ad emu start` calls this).
+ensure_emu() {
+  local i
+  systemctl --user cat android-emulator >/dev/null 2>&1 || die "no android-emulator user service on this machine"
+  if ! devices | awk -v s="$EMU_SERIAL" '$1==s {f=1} END {exit !f}'; then
+    echo "ad: starting the emulator (about 80 s)" >&2
+    systemctl --user start android-emulator
+    for i in $(seq 1 120); do devices | awk -v s="$EMU_SERIAL" '$1==s {f=1} END {exit !f}' && break; sleep 1; done
+  fi
+  for i in $(seq 1 180); do
+    if [ "$(adb -s "$EMU_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+      # A CPU-rendered cold boot often raises "System UI isn't responding"; answer Wait.
+      for i in $(seq 1 20); do
+        if adb -s "$EMU_SERIAL" shell dumpsys window 2>/dev/null | grep -q 'mCurrentFocus=.*Application Not Responding'; then
+          S="$EMU_SERIAL" ui_dump --find aerr_wait --xy >/dev/null 2>&1 \
+            && adb -s "$EMU_SERIAL" shell input tap $(S="$EMU_SERIAL" ui_dump --find aerr_wait --xy) \
+            && echo "ad: dismissed a 'not responding' dialog after boot" >&2
+        fi
+        sleep 1
+      done
+      echo "$EMU_SERIAL"; return
+    fi
+    sleep 1
+  done
+  die "emulator did not finish booting in 5 min: journalctl --user -u android-emulator"
+}
+
+# Resolve the target to one serial: named target, "emu", exact serial, or a unique
+# case-insensitive match on the `adb devices -l` line (model, product, device).
+pick() {
+  local want="$1" list n m addr
+  if [ "$want" = "emu" ]; then
+    devices | awk -v s="$EMU_SERIAL" '$1==s {f=1} END {exit !f}' && { echo "$EMU_SERIAL"; return; }
+    die "the emulator is not running. Start it with 'ad emu start', and run 'ad emu stop' when you are done"
+  fi
+  if [ -n "$want" ] && addr="$(target_addr "$want")"; then connect_target "$addr"; return; fi
+  list="$(devices)"
+  n="$(grep -c . <<<"$list" || true)"
+  if [ -z "$want" ]; then
+    [ "$n" = 1 ] && { awk '{print $1}' <<<"$list"; return; }
+    [ "$n" = 0 ] && die "no device connected. Named targets: $(names). Local: ad emu start"
+    die "$n devices connected; choose one with -s NAME|SERIAL:\n$list"
+  fi
+  awk -v w="$want" '$1==w {f=1} END {exit !f}' <<<"$list" && { echo "$want"; return; }
+  m="$(grep -iF -- "$want" <<<"$list" || true)"
+  n="$(grep -c . <<<"$m" || true)"
+  [ "$n" = 1 ] && { awk '{print $1}' <<<"$m"; return; }
+  [ "$n" = 0 ] && die "no device or named target matches '$want'. Named targets: $(names)\n${list:-  (none connected)}"
+  die "'$want' matches $n devices; use the exact serial:\n$m"
+}
+
+# --- leases: one driver per device at a time, across every session and account -------------
+# A lease is a file per device key (emu, a named target, or a serial) under $LEASES, written
+# under flock. Commands that change a device need its lease; looking needs none. The owner is
+# the Claude session (subagents share it), or $AD_OWNER, or "manual" for a person at a shell.
+LEASES="${AD_LEASES:-$HOME/.local/state/ad/leases}"
+OWNER="${AD_OWNER:-${CLAUDE_CODE_SESSION_ID:-manual}}"
+LEASE_IDLE=$((10 * 60))      # a lease lives at least this long after its holder's last command
+
+lease_key() { # key for the target string, or for a resolved serial
+  case "$1" in emu|"$EMU_SERIAL") echo emu ;; *) echo "${1//[^A-Za-z0-9._-]/_}" ;; esac
+}
+lease_file() { echo "$LEASES/$1"; }
+lease_get() { # <key> <field>
+  local f; f="$(lease_file "$1")"; [ -f "$f" ] && sed -n "s/^$2=//p" "$f" | head -1; return 0
+}
+lease_live() { # <key>: true when someone holds an unexpired lease
+  local exp; exp="$(lease_get "$1" expires)"; [ -n "$exp" ] && [ "$exp" -gt "$(date +%s)" ]
+}
+lease_mine() { lease_live "$1" && [ "$(lease_get "$1" owner)" = "$OWNER" ]; }
+lease_write() { # <key> <expires> <purpose> <started_emu>   (call under lease_locked)
+  local since; since="$(lease_get "$1" since)"; [ -n "$since" ] || since="$(date +%s)"
+  mkdir -p "$LEASES"
+  printf 'owner=%s\npurpose=%s\nexpires=%s\nstarted_emu=%s\nsince=%s\n' \
+    "$OWNER" "$3" "$2" "${4:-0}" "$since" > "$(lease_file "$1").tmp"
+  mv "$(lease_file "$1").tmp" "$(lease_file "$1")"
+}
+lease_try() { # <key> <minutes> <purpose>: take or extend; exit 3 when someone else holds it
+  if lease_live "$1" && ! lease_mine "$1"; then return 3; fi
+  # An expired lease from someone else is replaced, but whether a lease started the emulator
+  # carries over, so whoever releases last still shuts down an emulator nobody stopped.
+  local started; started="$(lease_get "$1" started_emu)"
+  lease_mine "$1" || rm -f "$(lease_file "$1")"
+  lease_write "$1" $(( $(date +%s) + $2 * 60 )) "$3" "$started"
+}
+lease_locked() { mkdir -p "$LEASES"; ( flock -w 10 9 || die "lease lock busy"; "$@" ) 9>"$LEASES/.lock"; }
+lease_holder() { # one line describing the holder of <key>
+  local exp; exp="$(lease_get "$1" expires)"; local left=$(( ${exp:-0} - $(date +%s) ))
+  echo "$1 is leased by $(lease_get "$1" owner) for \"$(lease_get "$1" purpose)\", $((left / 60)) min left"
+}
+lease_touch() { # extend my lease on every command that changes the device
+  local key="$1" exp now; now=$(date +%s); exp="$(lease_get "$key" expires)"; exp="${exp:-0}"
+  [ "$exp" -lt $((now + LEASE_IDLE)) ] && lease_write "$key" $((now + LEASE_IDLE)) "$(lease_get "$key" purpose)" "$(lease_get "$key" started_emu)"
+  return 0
+}
+need_lease() { # <key>: die unless this session holds it
+  [ "${AD_NO_LEASE:-0}" = 1 ] && return
+  lease_mine "$1" && { lease_locked lease_touch "$1"; return; }
+  if lease_live "$1"; then die "$(lease_holder "$1"). Wait with: ad -s $1 lease acquire --wait \"<purpose>\""; fi
+  die "no lease on $1. Take it first: ad -s $1 lease acquire \"<purpose>\" (release it when done)"
+}
+lease_cmd() { # ad -s KEY lease acquire [--for MIN] [--wait] "purpose" | release | status
+  local key="$1" sub="${2:-status}"; shift 2 || true
+  case "$sub" in
+    acquire)
+      local mins=30 wait=0 purpose=""
+      while [ $# -gt 0 ]; do case "$1" in --for) mins="$2"; shift 2 ;; --wait) wait=1; shift ;; *) purpose="$1"; shift ;; esac; done
+      [ -n "$purpose" ] || die "say what the lease is for: ad -s $key lease acquire \"<purpose>\""
+      local deadline=$(( $(date +%s) + 30 * 60 ))
+      while :; do
+        if lease_locked lease_try "$key" "$mins" "$purpose"; then
+          echo "leased $key for $mins min: $purpose"; return
+        fi
+        [ $wait = 1 ] && [ "$(date +%s)" -lt $deadline ] || die "$(lease_holder "$key")"
+        echo "ad: $(lease_holder "$key"); waiting" >&2; sleep 20
+      done ;;
+    release)
+      lease_mine "$key" || { lease_live "$key" && die "$(lease_holder "$key"); not yours to release"; echo "no lease on $key"; return; }
+      if [ "$key" = emu ] && [ "$(lease_get emu started_emu)" = 1 ]; then
+        systemctl --user stop android-emulator && echo "emulator stopped (this lease started it)"
+      fi
+      rm -f "$(lease_file "$key")"; echo "released $key" ;;
+    status)
+      local f k any=0
+      for f in "$LEASES"/*; do
+        [ -f "$f" ] || continue; k="$(basename "$f")"; any=1
+        if lease_live "$k"; then echo "$(lease_holder "$k")$([ "$(lease_get "$k" owner)" = "$OWNER" ] && echo ' (you)')"
+        else echo "$k: free (expired lease from $(lease_get "$k" owner))"; fi
+      done
+      [ $any = 1 ] || echo "no leases" ;;
+    *) die "usage: ad -s DEVICE lease acquire [--for MIN] [--wait] \"purpose\" | release | status" ;;
+  esac
+}
+
+names() { [ -f "$TARGETS" ] && awk '!/^#/ && NF {printf "%s ", $1}' "$TARGETS"; echo emu; }
+
+TARGET="${ANDROID_SERIAL:-}"
+if [ "${1:-}" = "-s" ]; then TARGET="${2:?ad: -s needs a name, serial, model or 'emu'}"; shift 2; fi
+cmd="${1:-help}"; shift || true
+
+case "$cmd" in
+    lease) lease_cmd "$(lease_key "${TARGET:-emu}")" "$@"; exit ;;
+    emu)   [ "${1:-}" = start ] || [ "${1:-}" = stop ] && need_lease emu ;;
+esac
+case "$cmd" in help|devices|emu) S="" ;; *) S="$(pick "$TARGET")" ;; esac
+
+# Looking needs no lease; anything that can change the device does. A getter (night, font, ...
+# with no value) only looks.
+case "$cmd" in
+    help|devices|emu|serial|status|top|ui|find|shot|zoom|record|logcat|crash|pkgs|perms) ;;
+    night|font|anim|airplane|density|size) [ $# -eq 0 ] || need_lease "$(lease_key "${TARGET:-$S}")" ;;
+    locale) [ $# -le 1 ] || need_lease "$(lease_key "${TARGET:-$S}")" ;;
+  *) need_lease "$(lease_key "${TARGET:-$S}")" ;;
+esac
+a() { adb -s "$S" "$@"; }
+sh_() { adb -s "$S" shell "$@"; }
+
+pkg_of_apk() {
+  local aapt; aapt="$(ls -d "$HOME"/Android/Sdk/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1)"
+  [ -n "$aapt" ] || return 1
+  "$aapt" dump badging "$1" 2>/dev/null | sed -n "s/^package: name='\([^']*\)'.*/\1/p"
+}
+
+ui_dump() {
+  sh_ uiautomator dump /sdcard/ad-ui.xml >/dev/null 2>&1 || die "uiautomator dump failed (screen animating? retry, or 'ad anim 0')"
+  a exec-out cat /sdcard/ad-ui.xml | python3 "$HERE/ui.py" "$@"
+}
+
+# Escape text for `input text`.
+esc() {
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/ /%s/g' -e "s/'/\\\\'/g" -e 's/"/\\"/g' -e 's/&/\\&/g' -e 's/</\\</g' -e 's/>/\\>/g' -e 's/(/\\(/g' -e 's/)/\\)/g' -e 's/|/\\|/g' -e 's/;/\;/g' -e 's/\*/\\*/g' -e 's/~/\\~/g'
+}
+
+# "x y" as is; "text" -> center of the first matching node.
+resolve_xy() {
+  if [[ "$1" =~ ^[0-9]+$ ]] && [[ "${2:-}" =~ ^[0-9]+$ ]]; then echo "$1 $2"; return; fi
+  local xy; xy="$(ui_dump --find "$1" --xy)"
+  [ -n "$xy" ] || die "no node matching '$1' on screen (run 'ad ui')"
+  echo "$xy"
+}
+
+case "$cmd" in
+  # --- devices -----------------------------------------------------------------
+  devices) # connected devices, then named targets that are not connected
+    adb devices -l | awk 'NR>1 && NF'
+    [ -f "$TARGETS" ] && awk '!/^#/ && NF {print "(target) " $1 " " $2}' "$TARGETS"
+    devices | awk -v s="$EMU_SERIAL" '$1==s {f=1} END {exit !f}' || echo "(emulator not running: ad emu start)" ;;
+  emu)     # ad emu start|stop   (the local Android 16 emulator; only `start` boots it)
+    case "${1:-}" in
+      start) running=0; devices | awk -v s="$EMU_SERIAL" '$1==s {f=1} END {exit !f}' && running=1
+             ensure_emu
+             [ $running = 0 ] && lease_locked lease_write emu "$(lease_get emu expires)" "$(lease_get emu purpose)" 1 ;;
+      stop)  systemctl --user stop android-emulator && echo "emulator stopped" ;;
+      *)     die "usage: ad emu start|stop" ;;
+    esac ;;
+  serial)  echo "$S" ;;   # for mobilerun -d and ANDROID_SERIAL
+  status)  echo "serial:  $S"
+           echo "model:   $(sh_ getprop ro.product.manufacturer | tr -d '\r') $(sh_ getprop ro.product.model | tr -d '\r')"
+           echo "android: $(sh_ getprop ro.build.version.release | tr -d '\r') (API $(sh_ getprop ro.build.version.sdk | tr -d '\r'), $(sh_ getprop ro.product.cpu.abi | tr -d '\r'))"
+           sh_ wm size | tr -d '\r'; sh_ wm density | tr -d '\r'
+           sh_ dumpsys battery 2>/dev/null | grep -E '^ *level' | sed 's/^ */battery /' || true
+           sh_ pm path com.mobilerun.portal >/dev/null 2>&1 && echo "portal:  installed" || echo "portal:  missing (mobilerun setup -d $S)" ;;
+
+  # --- goals: codex ------------------------------------------------------------------
+  codex)   # ad codex "goal" [-m MODEL]   (Codex CLI drives the device through ad; same lease)
+    case "${1:-}" in ""|-h|--help) die "usage: ad -s DEVICE codex \"goal\" [codex exec flags]" ;; esac
+    goal="$1"; shift
+    work="$(mktemp -d "${TMPDIR:-/tmp}/ad-codex.XXXXXX")"
+    cat > "$work/PROMPT.md" <<PROMPT
+You drive one Android device through the \`ad\` tool. Use only commands of this form:
+  $HERE/ad -s ${TARGET:-$S} <command>
+Commands: top, ui, find TEXT, tap TEXT|X Y, long, swipe up|down|left|right, type ASCII,
+key NAME, back, home, launch PKG, shot FILE, zoom TEXT FILE, logcat PKG, crash. Run no other
+programs and never install, uninstall, clear data or change settings unless the goal says so.
+Look ($HERE/ad -s ${TARGET:-$S} ui) before each tap; act in small steps.
+
+Goal: $goal
+
+Finish with: the end state you saw (from ui or top), each step you took as an ad command, and
+anything that looked wrong. Save any screenshots under $work.
+PROMPT
+    t0=$(date +%s)
+    AD_OWNER="$OWNER" codex exec --skip-git-repo-check --ephemeral -C "$work" \
+      -s workspace-write -c sandbox_workspace_write.network_access=true --add-dir "$LEASES" \
+      -c model_reasoning_effort=low -o "$work/answer.md" "$@" - < "$work/PROMPT.md" >"$work/log.txt" 2>&1 \
+      || { tail -20 "$work/log.txt" >&2; die "codex failed; full log: $work/log.txt"; }
+    cat "$work/answer.md"; echo "ad: codex took $(( $(date +%s) - t0 )) s; log and files in $work" >&2 ;;
+  # --- goals: mobilerun ---------------------------------------------------------------
+  run)     # ad run "goal" [mobilerun run flags]   (LLM agent; keyboard restored afterwards)
+    [ $# -ge 1 ] || die 'usage: ad run "goal" [--reasoning] [--vision] [--steps N]'
+    goal="$1"; shift
+    # mobilerun selects its own keyboard at the start and `ime disable`s it at the end, which
+    # leaves Android on whatever enabled IME comes next (voice typing on Pong). Put back both
+    # the selected keyboard and the enabled set.
+    ime="$(sh_ settings get secure default_input_method | tr -d '\r')"
+    enabled="$(sh_ ime list -s | tr -d '\r')"
+    rc=0; mobilerun run -d "$S" --no-stream "$@" "$goal" || rc=$?
+    for i in $enabled; do
+      sh_ ime list -s | tr -d '\r' | grep -qxF "$i" || sh_ ime enable "$i" >/dev/null
+    done
+    now="$(sh_ settings get secure default_input_method | tr -d '\r')"
+    if [ -n "$ime" ] && [ "$ime" != "null" ] && [ "$now" != "$ime" ]; then
+      sh_ ime set "$ime" >/dev/null && echo "ad: restored keyboard $ime (mobilerun left $now)" >&2
+    fi
+    exit "$rc" ;;
+
+  # --- acting (fast adb input; never changes the keyboard) ------------------------------
+  tap)     xy="$(resolve_xy "$@")" || exit 1; read -r x y <<<"$xy"; sh_ input tap "$x" "$y" ;;
+  long)    xy="$(resolve_xy "$@")" || exit 1; read -r x y <<<"$xy"; sh_ input swipe "$x" "$y" "$x" "$y" 800 ;;
+  swipe)   # ad swipe up|down|left|right [ms]  or  ad swipe x1 y1 x2 y2 [ms]
+    read -r w h <<<"$(sh_ wm size | tr -d '\r' | tail -1 | awk '{print $3}' | tr x ' ')"
+    case "${1:-}" in
+      up)    sh_ input swipe $((w/2)) $((h*7/10)) $((w/2)) $((h*3/10)) "${2:-300}" ;;
+      down)  sh_ input swipe $((w/2)) $((h*3/10)) $((w/2)) $((h*7/10)) "${2:-300}" ;;
+      left)  sh_ input swipe $((w*8/10)) $((h/2)) $((w*2/10)) $((h/2)) "${2:-300}" ;;
+      right) sh_ input swipe $((w*2/10)) $((h/2)) $((w*8/10)) $((h/2)) "${2:-300}" ;;
+      *)     sh_ input swipe "$@" ;;
+    esac ;;
+  type)    sh_ input text "$(esc "$*")" ;;   # ASCII only
+  key)     for k in "$@"; do sh_ input keyevent "KEYCODE_${k#KEYCODE_}"; done ;;
+  back)    sh_ input keyevent KEYCODE_BACK ;;
+  home)    sh_ input keyevent KEYCODE_HOME ;;
+  launch)  act="$(sh_ cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$1" | tail -1 | tr -d '\r')"
+           [ -n "$act" ] || die "no launcher activity for $1 (installed?)"; sh_ am start -W -n "$act" | grep -E 'Status|TotalTime|Error' ;;
+
+  # --- looking (fast, no LLM) --------------------------------------------------------
+  top)     sh_ dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | sed 's/^ *//' ;;
+  ui)      ui_dump "$@" ;;
+  find)    ui_dump --find "$1" ;;
+  shot)    out="${1:-/tmp/ad-$(date +%H%M%S).png}"; mkdir -p "$(dirname "$out")"; a exec-out screencap -p > "$out"; echo "$out" ;;
+  record)  # ad record SECONDS [out.mp4]  (screenrecord; frame loop where there is no encoder)
+    secs="${1:-10}"; out="${2:-/tmp/ad-$(date +%H%M%S).mp4}"; mkdir -p "$(dirname "$out")"
+    if sh_ screenrecord --time-limit "$secs" /sdcard/ad-rec.mp4 2>/dev/null; then
+      a pull /sdcard/ad-rec.mp4 "$out" >/dev/null 2>&1 || die "pull of the recording failed"; sh_ rm -f /sdcard/ad-rec.mp4; echo "$out"; exit 0
+    fi
+    d="$(mktemp -d)"; end=$((SECONDS + secs)); n=0
+    while [ $SECONDS -lt $end ]; do a exec-out screencap -p > "$d/$(printf %05d $n).png"; n=$((n+1)); done
+    fps=$(( n / secs )); [ "$fps" -lt 1 ] && fps=1
+    ffmpeg -loglevel error -y -framerate "$fps" -i "$d/%05d.png" -pix_fmt yuv420p "$out"; rm -rf "$d"; echo "$out ($n frames)" ;;
+  zoom)    # ad zoom TEXT|X1,Y1,X2,Y2 [out.png] [--all] [--pad PX] [--scale N]   (close-up of an element at native pixels)
+    target="${1:?usage: ad zoom TEXT|x1,y1,x2,y2 [out.png] [--all] [--pad 24] [--scale N]}"; shift
+    out=""; all=0; pad=24; scale=""
+    while [ $# -gt 0 ]; do
+      case "$1" in --all) all=1 ;; --pad) pad="$2"; shift ;; --scale) scale="$2"; shift ;; *) out="$1" ;; esac; shift
+    done
+    out="${out:-/tmp/ad-zoom-$(date +%H%M%S).png}"; mkdir -p "$(dirname "$out")"
+    full="${out%.png}-full.png"
+    a exec-out screencap -p > "$full"
+    if [[ "$target" =~ ^[0-9]+,[0-9]+,[0-9]+,[0-9]+$ ]]; then boxes="${target//,/ }"
+    else boxes="$(ui_dump --find "$target" --bounds)" || die "no node matching '$target' on screen (run 'ad ui')"; fi
+    [ "$all" = 1 ] || boxes="$(head -1 <<<"$boxes")"
+    read -r W H <<<"$(magick identify -format '%w %h' "$full")"
+    n=0
+    while read -r x1 y1 x2 y2; do
+      [ -n "$x1" ] || continue
+      n=$((n+1)); [ "$n" -gt 8 ] && { echo "(stopped at 8 crops)"; break; }
+      cx1=$(( x1-pad > 0 ? x1-pad : 0 )); cy1=$(( y1-pad > 0 ? y1-pad : 0 ))
+      cx2=$(( x2+pad < W ? x2+pad : W )); cy2=$(( y2+pad < H ? y2+pad : H ))
+      cw=$((cx2-cx1)); ch=$((cy2-cy1)); long=$(( cw > ch ? cw : ch ))
+      # Image readers shrink anything past ~1568 px, so pick the largest whole factor that stays under it.
+      s="${scale:-$(( 1568 / long ))}"; [ "$s" -lt 1 ] && s=1; [ "$s" -gt 6 ] && s=6
+      f="$out"; [ "$all" = 1 ] && f="${out%.png}-$n.png"
+      magick "$full" -crop "${cw}x${ch}+${cx1}+${cy1}" +repage -filter point -resize "$((s*100))%" "$f"
+      echo "$f  element ($x1,$y1)-($x2,$y2), ${s}x"
+      # One line per crop, so a reviewer who gets only the images knows real sizes.
+      printf '%s\telement %s,%s-%s,%s (%sx%s px on device)\tcrop %s,%s-%s,%s\tscale %sx\ttarget %s\n' \
+        "$(basename "$f")" "$x1" "$y1" "$x2" "$y2" "$((x2-x1))" "$((y2-y1))" "$cx1" "$cy1" "$cx2" "$cy2" "$s" "$target" \
+        >> "$(dirname "$f")/zoom-index.tsv"
+      [ "$long" -gt 1568 ] && echo "  (crop is ${long}px, wider than a reader shows at 1:1; zoom into parts with X1,Y1,X2,Y2)"
+    done <<<"$boxes"
+    echo "$full  (full screenshot, same moment)" ;;
+  frames)  # ad frames SECONDS [outdir] [-- ACTION ...]   (record, then one PNG per distinct frame + sheet.png)
+    secs="${1:-3}"; shift || true
+    outdir="/tmp/ad-frames-$(date +%H%M%S)"
+    if [ $# -gt 0 ] && [ "$1" != "--" ]; then outdir="$1"; shift; fi
+    [ "${1:-}" = "--" ] && shift
+    mkdir -p "$outdir"; rm -f "$outdir"/f*.png
+    "$0" -s "$S" record "$secs" "$outdir/clip.mp4" >/dev/null &
+    rp=$!
+    if [ $# -gt 0 ]; then sleep 1; "$0" -s "$S" "$@"; fi   # the action under test, once recording runs
+    wait "$rp" || die "recording failed"
+    # screenrecord only writes a frame when the screen changes, so passthrough keeps each distinct frame.
+    ffmpeg -loglevel error -y -i "$outdir/clip.mp4" -fps_mode passthrough "$outdir/f%03d.png"
+    n=$(ls "$outdir"/f*.png 2>/dev/null | wc -l)
+    [ "$n" -gt 0 ] || die "no frames extracted from $outdir/clip.mp4"
+    if [ "$n" -gt 90 ]; then rm -f "$outdir"/f*.png; ffmpeg -loglevel error -y -i "$outdir/clip.mp4" -vf fps=30 "$outdir/f%03d.png"; fi
+    prev=""; for f in "$outdir"/f*.png; do   # drop exact repeats of the previous frame; gaps in numbering mark time
+      h="$(magick "$f" -depth 8 rgb:- | md5sum | cut -c1-32)"; [ "$h" = "$prev" ] && rm -f "$f"; prev="$h"
+    done
+    n=$(ls "$outdir"/f*.png | wc -l)
+    step=$(( (n + 11) / 12 ))
+    magick montage $(ls "$outdir"/f*.png | awk -v s="$step" '(NR-1) % s == 0') -tile 4x -geometry 360x+6+6 -background '#808080' "$outdir/sheet.png"
+    echo "$outdir: $n frames (f001.png ...), sheet.png = 12 evenly spaced frames, clip.mp4" ;;
+
+  # --- apps --------------------------------------------------------------------------
+  install) # ad install app.apk [--fresh]   (--fresh uninstalls first so the first-run flow shows)
+    apk="$1"; [ "${2:-}" = "--fresh" ] && { pkg="$(pkg_of_apk "$apk" 2>/dev/null || true)"; [ -n "$pkg" ] && sh_ pm uninstall "$pkg" >/dev/null 2>&1 || true; }
+    a install -r "$apk" ;;
+  open)    sh_ am start -W -a android.intent.action.VIEW -d "$1" | grep -E 'Status|Activity|Error' ;;  # deep link
+  stop)    sh_ am force-stop "$1" ;;
+  kill)    sh_ am kill "$1" ;;      # background process death; app must be in background
+  clear)   sh_ pm clear "$1" ;;     # first-run state, keeps the APK
+  pkgs)    # ad pkgs [FILTER] [--all]
+    f=-3; q=""; for x in "$@"; do [ "$x" = "--all" ] && f="" || q="$x"; done
+    sh_ pm list packages $f | sed 's/package://' | tr -d '\r' | grep -i -- "$q" || true ;;
+  perm)    sh_ pm "$2" "$1" "$3" ;;  # ad perm PKG grant|revoke android.permission.X
+  perms)   sh_ dumpsys package "$1" | sed -n '/runtime permissions:/,/^$/p' | head -40 ;;
+
+  # --- conditions: no argument prints the current value; note it, then restore exactly that --
+  night)   [ $# -eq 0 ] && { sh_ cmd uimode night | tr -d '\r'; exit; }; sh_ cmd uimode night "$1" ;;   # yes|no
+  font)    [ $# -eq 0 ] && { sh_ settings get system font_scale | tr -d '\r'; exit; }
+           sh_ settings put system font_scale "$1" ;;                # 0.85 1.0 1.15 1.3 1.5 1.8
+  anim)    [ $# -eq 0 ] && { sh_ settings get global window_animation_scale | tr -d '\r'; exit; }
+           for k in window_animation_scale transition_animation_scale animator_duration_scale; do sh_ settings put global $k "$1"; done ;;
+  locale)  # ad locale PKG [ar-KW|""]   (per app, Android 13+; no value prints it, "" resets)
+           [ $# -eq 1 ] && { sh_ cmd locale get-app-locales "$1" --user 0 | tr -d '\r'; exit; }
+           sh_ cmd locale set-app-locales "$1" --user 0 --locales "${2:-}" ;;
+  airplane) [ $# -eq 0 ] && { sh_ settings get global airplane_mode_on | tr -d '\r'; exit; }
+           sh_ cmd connectivity airplane-mode "$1" ;;               # enable|disable
+  density) [ $# -eq 0 ] && { sh_ wm density | tr -d '\r'; exit; }; sh_ wm density "$1" ;;   # 420 | reset
+  size)    [ $# -eq 0 ] && { sh_ wm size | tr -d '\r'; exit; }; sh_ wm size "$1" ;;         # 1080x2412 | reset
+
+  # --- logs ----------------------------------------------------------------------------
+  logcat)  # ad logcat PKG [extra logcat args]   (pid-filtered)
+    pkg="${1:-}"; shift || true
+    if [ -z "$pkg" ] || [ "$pkg" = "--all" ]; then a logcat -v time "$@"; else
+      p="$(sh_ pidof "$pkg" 2>/dev/null | tr -d '\r')" || true
+      [ -n "$p" ] && a logcat -v time --pid="$p" "$@" || a logcat -v time "$@" | grep -F "$pkg"
+    fi ;;
+  logclear) a logcat -c ;;
+  crash)   a logcat -d -b crash -v time | tail -80 ;;
+
+  runas)   # ad runas PKG "command"   (runs inside a debuggable app's own uid and data dir; prints output)
+    pkg="${1:?ad runas PKG \"command\"}"; shift
+    [ $# -gt 0 ] || die "usage: ad -s DEVICE runas PKG \"command\"   (set AD_RUNAS_PRELUDE for an env prefix)"
+    printf '%s\n%s\n' "${AD_RUNAS_PRELUDE:-}" "$*" | a shell run-as "$pkg" sh -s ;;
+
+  # --- raw -------------------------------------------------------------------------------
+  adb)     a "$@" ;;
+  shell)   sh_ "$@" ;;
+
+  help|*)
+    sed -n '/^# ad —/,/^set -e/p' "$0" | head -3
+    grep -E '^  [a-z|-]+\)' "$0" | sed -E 's/^  ([a-z|-]+)\).*/  \1/' | tr '\n' ' '; echo
+    echo "  lease acquire|release|status: one driver per device; changing a device needs its lease"
+    echo "  Docs: $HERE/SKILL.md" ;;
+esac

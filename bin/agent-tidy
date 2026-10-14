@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# agent-tidy: remove what agent sessions leave behind, without touching open work.
+#
+# For every git repo under ~/Projects (or the repos given as arguments):
+#   - a linked worktree is removed when its branch is merged into one of the repo's long-lived
+#     branches, it has no tracked changes and no untracked non-ignored files, it is not locked
+#     (Claude Code locks the worktree of a running agent), and its last commit is over a day old;
+#   - its branch is then deleted (git branch -d, which refuses anything unmerged);
+#   - empty leftover folders under .claude/worktrees are removed;
+#   - work-logs/ files older than 14 days are deleted.
+# Unmerged worktrees are listed, never touched. Dry run unless --apply.
+set -u
+APPLY=0
+[ "${1:-}" = "--apply" ] && { APPLY=1; shift; }
+LONG_LIVED="main master dev pre nix-edition io-vaj-package"
+MIN_AGE=$((24 * 3600))
+now=$(date +%s)
+
+run() { if [ $APPLY = 1 ]; then "$@"; else echo "  would: $*"; fi; }
+
+repos=("$@")
+if [ ${#repos[@]} = 0 ]; then
+  while IFS= read -r g; do repos+=("$(dirname "$g")"); done \
+    < <(find "$HOME/Projects" -maxdepth 4 -name .git -type d 2>/dev/null)
+fi
+
+for repo in "${repos[@]}"; do
+  git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || continue
+  targets=()
+  for b in $LONG_LIVED; do
+    git -C "$repo" rev-parse -q --verify "refs/heads/$b" >/dev/null && targets+=("$b")
+  done
+  [ ${#targets[@]} = 0 ] && continue
+  git -C "$repo" worktree prune
+
+  main_wt=$(git -C "$repo" rev-parse --show-toplevel)
+  path="" branch="" locked=0
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*) path=${line#worktree }; branch=""; locked=0 ;;
+      "branch "*) branch=${line#branch refs/heads/} ;;
+      locked*) locked=1 ;;
+      "")
+        if [ -n "$path" ] && [ "$path" != "$main_wt" ]; then
+          why=""
+          if [ $locked = 1 ]; then why="locked (agent running)"
+          elif [ -z "$branch" ]; then why="detached HEAD"
+          elif [ -n "$(git -C "$path" status --porcelain 2>/dev/null)" ]; then why="uncommitted or untracked files"
+          else
+            merged=0
+            for t in "${targets[@]}"; do
+              git -C "$repo" merge-base --is-ancestor "$branch" "$t" 2>/dev/null && { merged=1; break; }
+            done
+            age=$(( now - $(git -C "$repo" log -1 --format=%ct "$branch" 2>/dev/null || echo "$now") ))
+            if [ $merged = 0 ]; then why="not merged"
+            elif [ $age -lt $MIN_AGE ]; then why="merged, but touched within a day"
+            fi
+          fi
+          if [ -n "$why" ]; then
+            echo "keep   $path [$branch]: $why"
+          else
+            echo "remove $path [$branch]"
+            run git -C "$repo" worktree remove --force "$path"
+            case " $LONG_LIVED " in *" $branch "*) ;; *) run git -C "$repo" branch -d "$branch" ;; esac
+          fi
+        fi
+        path="" ;;
+    esac
+  done < <(git -C "$repo" worktree list --porcelain; echo)
+
+  if [ -d "$repo/.claude/worktrees" ]; then
+    for d in "$repo"/.claude/worktrees/*/; do
+      [ -d "$d" ] || continue
+      [ -z "$(find "$d" \( -type f -o -type l \) -print -quit)" ] || continue
+      [ -n "$(find "$d" -maxdepth 0 -mmin +1440)" ] || { echo "keep   empty $d: created within a day"; continue; }
+      echo "remove empty $d"; run rm -r -- "$d"
+    done
+  fi
+  if [ -d "$repo/work-logs" ]; then
+    n=$(find "$repo/work-logs" -type f -mtime +14 | wc -l)
+    [ "$n" -gt 0 ] && { echo "remove $n work-logs files older than 14 days in $repo"; run find "$repo/work-logs" -type f -mtime +14 -delete; }
+  fi
+done
+[ $APPLY = 1 ] || echo "(dry run; pass --apply to act)"
