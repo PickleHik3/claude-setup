@@ -24,10 +24,10 @@ build, how to reach each screen); the skill and `device-checker` read it when pr
 ## Plugins
 
 - [show-your-work, our fork](https://github.com/PickleHik3/claude-show-your-work) (tag
-  `v0.6.3-pk.1`): shows screenshots and plays recordings inline in a kitty-graphics terminal, at no
+  `v0.6.3-pk.2`): shows screenshots and plays recordings inline in a kitty-graphics terminal, at no
   token cost. The fork turns telemetry and auto-update off in code and points the prompts at `ad`
   recordings instead of Playwright. Install: `claude plugin marketplace add
-  https://github.com/PickleHik3/claude-show-your-work.git#v0.6.3-pk.1`, then
+  https://github.com/PickleHik3/claude-show-your-work.git#v0.6.3-pk.2`, then
   `claude plugin install show-your-work@picklehik3`.
 
 ## Not included
