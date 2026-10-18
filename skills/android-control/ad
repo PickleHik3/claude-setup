@@ -246,7 +246,9 @@ case "$cmd" in
 
   # --- goals: codex ------------------------------------------------------------------
   codex)   # ad codex "goal" [-m MODEL]   (Codex CLI drives the device through ad; same lease)
+           # AD_CODEX_SANDBOX=danger-full-access lifts the sandbox (ssh, paths outside the workdir).
     case "${1:-}" in ""|-h|--help) die "usage: ad -s DEVICE codex \"goal\" [codex exec flags]" ;; esac
+    sandbox="${AD_CODEX_SANDBOX:-workspace-write}"
     goal="$1"; shift
     work="$(mktemp -d "${TMPDIR:-/tmp}/ad-codex.XXXXXX")"
     cat > "$work/PROMPT.md" <<PROMPT
@@ -264,7 +266,7 @@ anything that looked wrong. Save any screenshots under $work.
 PROMPT
     t0=$(date +%s)
     AD_OWNER="$OWNER" codex exec --skip-git-repo-check --ephemeral -C "$work" \
-      -s workspace-write -c sandbox_workspace_write.network_access=true --add-dir "$LEASES" \
+      -s "$sandbox" -c sandbox_workspace_write.network_access=true --add-dir "$LEASES" \
       -c model_reasoning_effort=low -o "$work/answer.md" "$@" - < "$work/PROMPT.md" >"$work/log.txt" 2>&1 \
       || { tail -20 "$work/log.txt" >&2; die "codex failed; full log: $work/log.txt"; }
     cat "$work/answer.md"; echo "ad: codex took $(( $(date +%s) - t0 )) s; log and files in $work" >&2 ;;
