@@ -228,13 +228,22 @@ case "$cmd" in
     adb devices -l | awk 'NR>1 && NF'
     [ -f "$TARGETS" ] && awk '!/^#/ && NF {print "(target) " $1 " " $2}' "$TARGETS"
     devices | awk -v s="$EMU_SERIAL" '$1==s {f=1} END {exit !f}' || echo "(emulator not running: ad emu start)" ;;
-  emu)     # ad emu start|stop   (the local Android 16 emulator; only `start` boots it)
+  emu)     # ad emu start|stop|reap   (the local Android 16 emulator; only `start` boots it)
     case "${1:-}" in
       start) running=0; devices | awk -v s="$EMU_SERIAL" '$1==s {f=1} END {exit !f}' && running=1
              ensure_emu
              [ $running = 0 ] && lease_locked lease_write emu "$(lease_get emu expires)" "$(lease_get emu purpose)" 1 ;;
       stop)  systemctl --user stop android-emulator && echo "emulator stopped" ;;
-      *)     die "usage: ad emu start|stop" ;;
+      reap)  # run by emu-reaper.timer: stop an emulator that no live lease holds
+        systemctl --user is-active -q android-emulator || exit 0
+        lease_live emu && exit 0
+        up="$(systemctl --user show -p ActiveEnterTimestamp --value android-emulator)"
+        [ $(( $(date +%s) - $(date -d "$up" +%s) )) -lt $((15 * 60)) ] && exit 0   # just booted
+        pgrep -f 'gradle.*connected[A-Za-z]*AndroidTest' >/dev/null && exit 0     # instrumentation run
+        echo "ad: no live lease on emu; stopping the emulator (up since $up)"
+        rm -f "$(lease_file emu)"
+        systemctl --user stop android-emulator ;;
+      *)     die "usage: ad emu start|stop|reap" ;;
     esac ;;
   serial)  echo "$S" ;;   # for mobilerun -d and ANDROID_SERIAL
   status)  echo "serial:  $S"

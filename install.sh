@@ -13,7 +13,7 @@ for f in "$R"/agents/*.md; do link "agents/$(basename "$f")" ~/.claude/agents/"$
 link hooks/model-gate.py ~/.claude/hooks/model-gate.py
 for s in "$R"/skills/*/; do s="$(basename "$s")"; link "skills/$s" ~/.claude/skills/"$s"; done
 link bin/agent-tidy ~/.local/bin/agent-tidy
-for u in agent-tidy.service agent-tidy.timer reports-http.service; do link "systemd/$u" ~/.config/systemd/user/"$u"; done
+for u in agent-tidy.service agent-tidy.timer reports-http.service emu-reaper.service emu-reaper.timer; do link "systemd/$u" ~/.config/systemd/user/"$u"; done
 [ -f ~/.config/ad/targets ] || { mkdir -p ~/.config/ad; cp "$R/ad/targets.example" ~/.config/ad/targets; echo "edit ~/.config/ad/targets"; }
 
 # Third-party skills, fetched from their own repos rather than republished here.

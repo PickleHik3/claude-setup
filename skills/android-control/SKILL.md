@@ -36,7 +36,7 @@ $A help                   # every subcommand
   and it runs arm64 apps through translation (install x86_64 builds where an app runs its
   own native binaries). It is reachable only while running: with its lease held, run
   `$A emu start` (about 80 s, KVM-accelerated, rendered on the CPU); releasing the lease
-  stops an emulator your lease started.
+  stops an emulator your lease started, and `emu-reaper.timer` stops one left up 15 min with no live lease.
 - an exact serial, or a unique piece of the model or product name.
 
 With no `-s`, `ad` uses `$ANDROID_SERIAL`, then the only connected device. When several are
