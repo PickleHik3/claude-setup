@@ -3,4 +3,4 @@ Description=Stop the Android emulator when no ad lease holds it
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/ad emu reap
+ExecStart=%h/.claude/skills/android-control/ad emu reap
