@@ -39,3 +39,15 @@ verify-first, device checks owed — recorded where the project says)
 
 Lavish runs only in this main session, never from a worker. The moment the server prints the URL,
 paste it into chat, before polling.
+
+# Grilling
+
+- `grilling`, `grill-me` and `grill-with-docs` ask each round through AskUserQuestion, not as a
+  markdown list: one question per decision (up to 4 per call, more calls for a bigger round), the
+  recommended answer as the first option marked "(Recommended)", a `preview` for ASCII mockups or
+  code. Plain text only for a question that can't be reduced to options.
+- A visual question shows its images first, in a herdr pane stacked below this one (phone-friendly):
+  `herdr pane split --current --direction down --cwd "$PWD" --no-focus`, then
+  `herdr pane run <pane_id> "timg -pk --title --grid=2 a.png b.png"`. Options name the image by its
+  title. Close the pane (`herdr pane close <pane_id>`) once the round is answered. Use `timg -pk`,
+  never `kitten`. Outside herdr (`$HERDR_PANE_ID` empty), skip the pane and say where the images are.
