@@ -99,6 +99,18 @@ Verdict: pass on all five. Specified graphics work, and analysis from traces, ar
 range. It doesn't foresee a whole-window repaint cost unless the brief names it, and the caller
 missed it too.
 
+### 2026-10-23: termux-launcher, X11 PulseAudio for Linux apps (fixer, Sonnet 5.5)
+
+A specified change across 3 classes plus tests and docs, with the cause and fix design given.
+85k / 25 / 3.5 min, then a review round of 22k / 19 / 3.7 min. The first pass was clean code and
+tests, but the shell design was wrong: `pulseaudio --start` in the shared runtime dir fails beside
+an existing server, and TCP sat on the daemon command line, so one busy port killed the whole
+daemon. It flagged the first of these itself as "verify first" without fixing it. The second pass
+applied the review exactly, and the emulator confirmed all four cases. It declined the emulator
+step, correctly: worker rules forbid adb.
+Verdict: pass on code. It does not foresee daemon and process interactions in shell; it names the
+risk but does not design around it. Say "design for an already-running instance" in briefs.
+
 ### Open questions to settle with later briefs
 
 - A change spanning 3+ files with a pure policy class and a test (the `fixer-opus` default).
