@@ -111,6 +111,20 @@ step, correctly: worker rules forbid adb.
 Verdict: pass on code. It does not foresee daemon and process interactions in shell; it names the
 risk but does not design around it. Say "design for an already-running instance" in briefs.
 
+### 2026-10-23: termux-launcher, Resize reset (pre) and Keyboard over display rows (fixer, Sonnet 5.5)
+
+Three specified tasks:
+1. **The pre port of a store fix.** It added a one-time reset under a shared flag, and changed the
+   snapshot restore so the keyboard mode is no longer written when only the default was in effect.
+   70k / 21 / 3 min. Correct first time. It flagged what the reset costs a deliberate Resize choice.
+2. **A Settings row on pre.** It added a search-landing case in SettingsActivity, unasked and right.
+3. **The same row on v2.** It correctly found that v2's settings index needs no code change.
+
+The full suite was green on both branches, and the emulator check of the pre release build passed.
+Verdict: pass. Settings rows and small store changes with a clear spec are within Sonnet's range.
+Neither row worker noticed the old docs sentence about the Layout editor being stale; the caller
+had to point it out.
+
 ### Open questions to settle with later briefs
 
 - A change spanning 3+ files with a pure policy class and a test (the `fixer-opus` default).
