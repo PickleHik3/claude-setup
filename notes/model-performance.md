@@ -57,6 +57,38 @@ Gradle daemon failing AAPT2 startup in worktrees; `--no-daemon` works) and it sa
 committed on a by-eye review, and listed exactly what to verify first. The caller ran the tests
 without the daemon: all green, diff clean. Verdict: pass; honest under a broken toolchain.
 
+### 2026-10-22 · termux-launcher · shader and latency series (five `fixer` briefs)
+
+Sonnet 5.5 took a run of graphics and performance work that would have gone to `fixer-opus`:
+
+1. **Round-1 latency telemetry** (trace sections across four modules, async spans, frame-source
+   counters, a gated echo redraw, a shader pre-warm through `HardwareRenderer`). 121k tokens, 41
+   calls, 8.6 min. Correct and well scoped. One slip: it put new fields between a Javadoc and the
+   field the Javadoc described.
+2. **Press-highlight experiment** (a RenderNode overlay that animates the pressed cap without
+   re-recording the keyboard, behind a runtime switch). 126k / 39 / 8.2 min. It found the real
+   per-frame cause (a scale on the whole cap) before writing code. The overlay was pixel-identical
+   on the device, and it chose `legacy` as the default because it could not verify that. It
+   reported honestly that the third item ("refresh runs 10 times a frame") was one refresh per
+   surface, but still shipped a gate that saved nothing. The caller dropped that commit.
+3. **Overlay default plus a Buffer Stuffing root-cause** from existing Perfetto traces. 101k / 34 /
+   6.6 min. Strong analysis: it read AOSP's classifier, joined frames to display frames, measured
+   the standing queue and the platform offsets, and ruled out GPU composition and refresh switching.
+   It also corrected an earlier mislabel ("presented" was buffer-ready).
+4. **Touch-down ADPF hint experiment.** 62k / 23 / 3.4 min. It noticed that `sendHint` is @hide in
+   SDK 36 and used reflection with a guarded fallback. On the device, hint sessions turned out to be
+   unsupported; it had flagged that as the first thing to verify.
+5. **Contour wallpaper-scene prototype** (a new AGSL program, an event-slot model, a Choreographer
+   loop, a low-res pass, wiring into the activity). 137k / 38 / 9 min. It compiled and drew on the
+   first device run with no crash. It correctly stopped short of the large glass rework and
+   described what that rework would take. Design miss: it put the scene inside the launcher window,
+   so every scene frame repainted the whole window (+10-15 ms of GPU). The brief didn't forbid
+   that, and the caller hadn't foreseen it either.
+
+Verdict: pass on all five. Specified graphics work, and analysis from traces, are within Sonnet's
+range. It doesn't foresee a whole-window repaint cost unless the brief names it, and the caller
+missed it too.
+
 ### Open questions to settle with later briefs
 
 - A change spanning 3+ files with a pure policy class and a test (the `fixer-opus` default).
