@@ -10,6 +10,9 @@ in files already in context stay here.
 | fixer | Sonnet, medium | A specified change, docs, mechanical edits; device-check driving. |
 | fixer-opus | Opus, high | Geometry, layout, design, policy with arithmetic, diff review, bugs whose cause is unknown. |
 
+- From 2026-10-22: hand `fixer` (Sonnet 5.5) tasks that would go to `fixer-opus`, one notch harder
+  each time, to find its upper limit; keep `fixer-opus` for what `notes/model-performance.md`
+  already shows Sonnet failing at. Record every outcome there.
 - Subagents never run on Fable, even when this session does. Fable is the main session's model
   only, chosen by the user.
 - Workers may spawn Explore for wide reading and nothing else; Explore spawns nothing. The

@@ -17,6 +17,7 @@ file here and editing it under `~/.claude` are the same thing.
 | `bin/agent-tidy`, `systemd/` | Daily cleanup of merged agent worktrees and old work logs (dry run unless `--apply`; timer off by default) |
 | `systemd/reports-http.service` | Serves `~/reports` on 127.0.0.1:8787; `tailscale serve` proxies it at `https://<host>.<tailnet>.ts.net/reports/` (tailnet only) |
 | `systemd/emu-reaper.*` | Every 5 min, `ad emu reap` stops the emulator once it has been up 15 min with no live `emu` lease (a forgotten release, a killed session) |
+| `notes/model-performance.md` | Ledger of what each subagent model did on real briefs; drives the delegation table |
 | `ad/targets.example` | Named devices for `ad`; copy to `~/.config/ad/targets` and fill in |
 
 An app opts into faster device checks with a `docs/agents/device-map.md` in its repo (package,
