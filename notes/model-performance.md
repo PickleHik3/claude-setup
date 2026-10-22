@@ -48,6 +48,15 @@ per-frame coalesced rebuild, a pure scale function, fit tests at 0.8/1.5 × font
 risks (sources restart on rebuild; editor picker preview unverified). Verdict: pass. Next notch:
 a change spanning packages with a policy class, then an unknown-cause bug.
 
+### 2026-10-22 · termux-launcher · "Split gap slider on the editor's Terminal tap, Margin cut loose from the pane gap"
+
+`fixer` (Sonnet 5.5) alone: an editor control end to end (enum, per-surface list, string,
+read/legend/write, geometry preview reuse), dead code removed, two test classes changed. 78k
+tokens, 16 tool calls, 2.1 min. Every Gradle run it tried died on an environment fault (a stale
+Gradle daemon failing AAPT2 startup in worktrees; `--no-daemon` works) and it said so plainly,
+committed on a by-eye review, and listed exactly what to verify first. The caller ran the tests
+without the daemon: all green, diff clean. Verdict: pass; honest under a broken toolchain.
+
 ### Open questions to settle with later briefs
 
 - A change spanning 3+ files with a pure policy class and a test (the `fixer-opus` default).
