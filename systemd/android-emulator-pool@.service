@@ -1,0 +1,13 @@
+[Unit]
+Description=Headless Android 16 emulator pool slot (AVD tl16b, read-only, emulator-%i)
+
+[Service]
+Type=simple
+Environment=ANDROID_SDK_ROOT=%h/Android/Sdk
+Environment=ANDROID_HOME=%h/Android/Sdk
+# -read-only lets several copies of tl16b run at once; installs and settings reset on stop.
+ExecStart=%h/Android/Sdk/emulator/emulator -avd tl16b -read-only -port %i -no-window -no-boot-anim -no-audio -no-metrics -gpu auto
+ExecStop=%h/Android/Sdk/platform-tools/adb -s emulator-%i emu kill
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=10
