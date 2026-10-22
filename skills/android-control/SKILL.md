@@ -72,6 +72,16 @@ Looking (`status`, `top`, `ui`, `find`, `shot`, `zoom`, `logcat`, getters) needs
 every command that can change the device refuses without one and names the holder. Each
 command extends your lease by 10 minutes. Subagents share their session's lease.
 
+**Picking up again after a pause** (a resumed worker, or you after waiting on something): your
+lease may have lapsed. Ten idle minutes free it, the reaper stops a slot 15 minutes after that, and
+a pool slot comes back empty: no build, no data, no settings. Another session may also have
+driven the slot meanwhile. `ad` notices both cases and refuses your first command once, saying
+what happened. When that happens, or you get "no lease" or "not running" on a slot you used before,
+re-lease it and start it, then reinstall and redo the setup before you carry on. Don't report
+anything from before the gap as still true. For work that spans a long pause, take `--for MIN` to
+cover it, or use `emu`, which keeps installs. When an orchestrator resumes a worker, its brief
+says the slot may have been reset.
+
 The device is ready when `$A -s X status` prints `portal: installed`. If it says missing,
 run `mobilerun setup -d $($A -s X serial)`. That installs the Mobilerun Portal app and
 enables its accessibility service, so on Pong, ask the user first.

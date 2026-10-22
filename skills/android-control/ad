@@ -101,7 +101,7 @@ pick() {
   local want="$1" list n m addr
   if is_slot "$want"; then
     slot_up "$want" && { slot_field "$want" serial; return; }
-    die "$want is not running. Start it with 'ad -s $want emu start' (lease it first), and run 'ad -s $want emu stop' when you are done"
+    die "$want is not running. Start it with 'ad -s $want emu start' (lease it first), and run 'ad -s $want emu stop' when you are done$([ "$(slot_field "$want" avd)" = tl16b ] && echo ". It is read-only: a fresh start has nothing from earlier runs, so install your build again")"
   fi
   if [ -n "$want" ] && addr="$(target_addr "$want")"; then connect_target "$addr"; return; fi
   list="$(devices)"
@@ -180,9 +180,41 @@ lease_touch() { # extend my lease on every command that changes the device
 }
 need_lease() { # <key>: die unless this session holds it
   [ "${AD_NO_LEASE:-0}" = 1 ] && return
-  lease_mine "$1" && { lease_locked lease_touch "$1"; return; }
+  lease_mine "$1" && { lease_locked lease_touch "$1"; is_slot "$1" && seen_check "$1"; return; }
   if lease_live "$1"; then die "$(lease_holder "$1"). Wait with: ad -s $1 lease acquire --wait \"<purpose>\""; fi
-  die "no lease on $1. Take it first: ad -s $1 lease acquire \"<purpose>\" (release it when done)"
+  local was=""; is_slot "$1" && [ -f "$SEEN/$1.$OWNER" ] && was=" You drove $1 before: it may have been reaped or used by another session since, so check what is installed before you rely on it."
+  die "no lease on $1. Take it first: ad -s $1 lease acquire \"<purpose>\" (release it when done).$was"
+}
+
+# A resumed agent must not trust a slot it left: pool slots reset on every restart, and another
+# session may have driven any slot in between. Each driver leaves a token in the emulator's
+# /data/local/tmp and keeps a copy in $SEEN; a missing or foreign token means the state it left is
+# gone (a snapshot boot keeps the kernel boot id, so only a mark inside the device shows a reset).
+# The first command after such a change is refused once.
+SEEN="$LEASES/.seen"
+TOKEN_PATH=/data/local/tmp/.ad-token
+slot_token() { adb -s "$(slot_field "$1" serial)" shell cat "$TOKEN_PATH" 2>/dev/null | tr -d '\r' || true; }
+seen_mark() { # <slot>: record this session as the slot's last driver
+  local t; t="${OWNER//[^A-Za-z0-9-]/_}.$(date +%s%N)"
+  adb -s "$(slot_field "$1" serial)" shell "echo $t > $TOKEN_PATH" 2>/dev/null || true
+  mkdir -p "$SEEN"; echo "$OWNER" > "$SEEN/$1.last"; echo "$t" > "$SEEN/$1.$OWNER"
+}
+seen_check() { # <slot>
+  slot_up "$1" || return 0
+  local cur mine last why=""; cur="$(slot_token "$1")"
+  mine="$(cat "$SEEN/$1.$OWNER" 2>/dev/null || true)"; last="$(cat "$SEEN/$1.last" 2>/dev/null || true)"
+  [ -n "$mine" ] && [ "$mine" = "$cur" ] && [ "$last" = "$OWNER" ] && return 0
+  if [ -n "$mine" ]; then
+    if [ -n "$last" ] && [ "$last" != "$OWNER" ]; then
+      why="another session drove $1 since your last command: what you installed or set there may be changed or gone"
+    elif [ "$(slot_field "$1" avd)" = tl16b ]; then
+      why="$1 restarted since your last command, and it is read-only: everything you installed, cleared or set there is gone"
+    else
+      why="$1's data was reset since your last command: what you installed or set there is gone"
+    fi
+  fi
+  seen_mark "$1"
+  [ -z "$why" ] || die "$why. Check with 'ad -s $1 pkgs' and 'ad -s $1 top', reinstall or redo setup, then rerun (this warning shows once)."
 }
 lease_cmd() { # ad -s KEY lease acquire [--for MIN] [--wait] "purpose" | acquire --any ... | release | status
   local key="$1" sub="${2:-status}"; shift 2 || true
@@ -302,9 +334,11 @@ case "$cmd" in
                [ "$free" -ge "$MIN_FREE_GIB" ] || die "only $free GiB of memory is available (an emulator needs about 6, and $MIN_FREE_GIB must stay free); stop an emulator you no longer need"
              fi
              ensure_emu "$SLOT"
+             seen_mark "$SLOT"   # a boot this session made is no surprise to it
              [ $running = 0 ] && lease_locked lease_write "$SLOT" "$(lease_get "$SLOT" expires)" "$(lease_get "$SLOT" purpose)" 1 ;;
       stop)  systemctl --user stop "$(slot_field "$SLOT" unit)" && echo "$SLOT stopped" ;;
       reap)  # run by emu-reaper.timer: stop each emulator that no live lease holds
+        find "$SEEN" -type f -mtime +2 -delete 2>/dev/null || true
         for k in $SLOTS; do
           slot_active "$k" || continue
           lease_live "$k" && continue
