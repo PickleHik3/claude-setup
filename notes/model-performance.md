@@ -57,6 +57,16 @@ Gradle daemon failing AAPT2 startup in worktrees; `--no-daemon` works) and it sa
 committed on a by-eye review, and listed exactly what to verify first. The caller ran the tests
 without the daemon: all green, diff clean. Verdict: pass; honest under a broken toolchain.
 
+### 2026-10-22 · claude-setup · "emulator pool in `ad`: slots, --any leases, boot flock, RAM and 4th-slot guards"
+
+`fixer` (Sonnet 5.5) alone on shell concurrency policy (a `fixer-opus`-grade brief): a slot table
+replacing a hard-coded serial across ~10 call sites, cross-session flock spacing launches 20 s
+apart, first-free lease selection preferring running slots, per-slot reaper, plus two SKILL.md
+edits. 81k tokens, 20 tool calls, 2.9 min. It exercised every non-booting path against a temp
+lease dir, added a meminfo override to test the RAM refusal, and named the boot-lock subshell as
+the thing to verify first. Diff was idiomatic; only miss: `--any` dies when `ANDROID_SERIAL` names
+a phone. Verdict: pass (live boot test by the caller below in the session).
+
 ### 2026-10-22 · termux-launcher · shader and latency series (five `fixer` briefs)
 
 Sonnet 5.5 took a run of graphics and performance work that would have gone to `fixer-opus`:
