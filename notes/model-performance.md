@@ -39,6 +39,15 @@ debug branches it quoted. Verdict: pass for a docs task; it does not fix a brief
 premise in code when told the code is out of scope, which is the rule, so the caller closed the
 gap (one script edit).
 
+### 2026-10-22 · termux-launcher · "Home widgets follow the shared Text size through WidgetTokens"
+
+`fixer` (Sonnet 5.5) alone, one notch up: 15 files, a Follower on the widget base view with a
+per-frame coalesced rebuild, a pure scale function, fit tests at 0.8/1.5 × font scale 1.0/1.3.
+89k tokens, 18 tool calls, 3.9 min. Diff was idiomatic (compare-before-rebuild, postOnAnimation,
+@After resets the static), stayed inside the widget package, and the report named the two real
+risks (sources restart on rebuild; editor picker preview unverified). Verdict: pass. Next notch:
+a change spanning packages with a policy class, then an unknown-cause bug.
+
 ### Open questions to settle with later briefs
 
 - A change spanning 3+ files with a pure policy class and a test (the `fixer-opus` default).
