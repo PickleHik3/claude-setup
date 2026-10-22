@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ad — drive Android devices: pick and connect a device, boot the emulator, look and act fast
 # over adb, set test conditions, read logs. `ad run "goal"` hands a goal to mobilerun.
-# Target: `ad -s NAME|SERIAL|MODEL|emu CMD`, else $ANDROID_SERIAL, else the only device.
+# Target: `ad -s NAME|SERIAL|MODEL|emu|emu2..emu4 CMD`, else $ANDROID_SERIAL, else the only device.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,49 +39,76 @@ connect_target() {
   die "cannot reach $addr over adb. On the phone, port 5555 closes on reboot: re-enable it with 'adb tcpip 5555' over USB or wireless debugging"
 }
 
-EMU_SERIAL=emulator-5554   # AVD tl16, run by the user service android-emulator
+# Local emulator slots. `emu` is AVD tl16 (writable, keeps installs and settings between boots).
+# emu2..emu4 are -read-only copies of AVD tl16b, so several can run at once; they lose installs
+# and settings when stopped. Each runs as a user service; the pool ones are one template unit.
+SLOTS="emu emu2 emu3 emu4"
+MEMINFO="${AD_MEMINFO:-/proc/meminfo}"
+MIN_FREE_GIB=8               # refuse a start when less than this much memory is available
+BOOT_GAP=20                  # seconds between two emulator launches (read-only copies crash if closer)
+slot_field() { # <slot> serial|unit|avd; empty when <slot> is not a slot
+  case "$1:$2" in
+    emu:serial) echo emulator-5554 ;;  emu:unit) echo android-emulator ;;            emu:avd) echo tl16 ;;
+    emu2:serial) echo emulator-5556 ;; emu2:unit) echo android-emulator-pool@5556 ;; emu2:avd) echo tl16b ;;
+    emu3:serial) echo emulator-5558 ;; emu3:unit) echo android-emulator-pool@5558 ;; emu3:avd) echo tl16b ;;
+    emu4:serial) echo emulator-5560 ;; emu4:unit) echo android-emulator-pool@5560 ;; emu4:avd) echo tl16b ;;
+  esac
+}
+is_slot() { [ -n "$(slot_field "$1" serial)" ]; }
+slot_up() { devices | awk -v s="$(slot_field "$1" serial)" '$1==s {f=1} END {exit !f}'; }
+slot_active() { systemctl --user is-active -q "$(slot_field "$1" unit)"; }
+mem_free_gib() { awk '/^MemAvailable:/ {print int($2 / 1048576)}' "$MEMINFO"; }
 
-# Boot the local emulator through its user service (only `ad emu start` calls this).
-ensure_emu() {
-  local i
-  systemctl --user cat android-emulator >/dev/null 2>&1 || die "no android-emulator user service on this machine"
-  if ! devices | awk -v s="$EMU_SERIAL" '$1==s {f=1} END {exit !f}'; then
-    echo "ad: starting the emulator (about 80 s)" >&2
-    systemctl --user start android-emulator
-    for i in $(seq 1 120); do devices | awk -v s="$EMU_SERIAL" '$1==s {f=1} END {exit !f}' && break; sleep 1; done
+# Boot a slot through its user service (only `ad emu start` calls this).
+ensure_emu() { # <slot>
+  local slot="$1" serial unit i t0 left
+  serial="$(slot_field "$slot" serial)"; unit="$(slot_field "$slot" unit)"
+  systemctl --user cat "$unit" >/dev/null 2>&1 || die "no $unit user service on this machine"
+  if ! slot_up "$slot"; then
+    echo "ad: starting $slot (about 80 s)" >&2
+    # One launch at a time across every session, and none within BOOT_GAP s of the last one.
+    mkdir -p "$LEASES"
+    (
+      flock -w 600 8 || die "another session is booting an emulator; try again in a minute"
+      t0=$(date +%s)
+      systemctl --user start "$unit"
+      for i in $(seq 1 120); do slot_up "$slot" && break; sleep 1; done
+      left=$(( BOOT_GAP - ($(date +%s) - t0) )); [ $left -gt 0 ] && sleep $left
+      exit 0
+    ) 8>"$LEASES/.boot"
   fi
   for i in $(seq 1 180); do
-    if [ "$(adb -s "$EMU_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+    if [ "$(adb -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
       # A CPU-rendered cold boot often raises "System UI isn't responding"; answer Wait.
       for i in $(seq 1 20); do
-        if adb -s "$EMU_SERIAL" shell dumpsys window 2>/dev/null | grep -q 'mCurrentFocus=.*Application Not Responding'; then
-          S="$EMU_SERIAL" ui_dump --find aerr_wait --xy >/dev/null 2>&1 \
-            && adb -s "$EMU_SERIAL" shell input tap $(S="$EMU_SERIAL" ui_dump --find aerr_wait --xy) \
+        if adb -s "$serial" shell dumpsys window 2>/dev/null | grep -q 'mCurrentFocus=.*Application Not Responding'; then
+          S="$serial" ui_dump --find aerr_wait --xy >/dev/null 2>&1 \
+            && adb -s "$serial" shell input tap $(S="$serial" ui_dump --find aerr_wait --xy) \
             && echo "ad: dismissed a 'not responding' dialog after boot" >&2
         fi
         sleep 1
       done
-      echo "$EMU_SERIAL"; return
+      echo "$serial"; return
     fi
     sleep 1
   done
-  die "emulator did not finish booting in 5 min: journalctl --user -u android-emulator"
+  die "$slot did not finish booting in 5 min: journalctl --user -u $unit"
 }
 
-# Resolve the target to one serial: named target, "emu", exact serial, or a unique
+# Resolve the target to one serial: named target, an emulator slot, exact serial, or a unique
 # case-insensitive match on the `adb devices -l` line (model, product, device).
 pick() {
   local want="$1" list n m addr
-  if [ "$want" = "emu" ]; then
-    devices | awk -v s="$EMU_SERIAL" '$1==s {f=1} END {exit !f}' && { echo "$EMU_SERIAL"; return; }
-    die "the emulator is not running. Start it with 'ad emu start', and run 'ad emu stop' when you are done"
+  if is_slot "$want"; then
+    slot_up "$want" && { slot_field "$want" serial; return; }
+    die "$want is not running. Start it with 'ad -s $want emu start' (lease it first), and run 'ad -s $want emu stop' when you are done"
   fi
   if [ -n "$want" ] && addr="$(target_addr "$want")"; then connect_target "$addr"; return; fi
   list="$(devices)"
   n="$(grep -c . <<<"$list" || true)"
   if [ -z "$want" ]; then
     [ "$n" = 1 ] && { awk '{print $1}' <<<"$list"; return; }
-    [ "$n" = 0 ] && die "no device connected. Named targets: $(names). Local: ad emu start"
+    [ "$n" = 0 ] && die "no device connected. Named targets: $(names). Local: ad -s emu emu start"
     die "$n devices connected; choose one with -s NAME|SERIAL:\n$list"
   fi
   awk -v w="$want" '$1==w {f=1} END {exit !f}' <<<"$list" && { echo "$want"; return; }
@@ -93,7 +120,7 @@ pick() {
 }
 
 # --- leases: one driver per device at a time, across every session and account -------------
-# A lease is a file per device key (emu, a named target, or a serial) under $LEASES, written
+# A lease is a file per device key (an emulator slot, a named target, or a serial) under $LEASES, written
 # under flock. Commands that change a device need its lease; looking needs none. The owner is
 # the Claude session (subagents share it), or $AD_OWNER, or "manual" for a person at a shell.
 LEASES="${AD_LEASES:-$HOME/.local/state/ad/leases}"
@@ -101,7 +128,10 @@ OWNER="${AD_OWNER:-${CLAUDE_CODE_SESSION_ID:-manual}}"
 LEASE_IDLE=$((10 * 60))      # a lease lives at least this long after its holder's last command
 
 lease_key() { # key for the target string, or for a resolved serial
-  case "$1" in emu|"$EMU_SERIAL") echo emu ;; *) echo "${1//[^A-Za-z0-9._-]/_}" ;; esac
+  local k
+  is_slot "$1" && { echo "$1"; return; }
+  for k in $SLOTS; do [ "$(slot_field "$k" serial)" = "$1" ] && { echo "$k"; return; }; done
+  echo "${1//[^A-Za-z0-9._-]/_}"
 }
 lease_file() { echo "$LEASES/$1"; }
 lease_get() { # <key> <field>
@@ -126,6 +156,18 @@ lease_try() { # <key> <minutes> <purpose>: take or extend; exit 3 when someone e
   lease_mine "$1" || rm -f "$(lease_file "$1")"
   lease_write "$1" $(( $(date +%s) + $2 * 60 )) "$3" "$started"
 }
+lease_try_any() { # <minutes> <purpose> <allow4>: lease the first free slot, a running one first; prints it
+  local k pass
+  for pass in running any; do
+    for k in $SLOTS; do
+      [ "$k" = emu4 ] && [ "$3" != 1 ] && continue
+      [ $pass = running ] && ! slot_up "$k" && continue
+      lease_live "$k" && continue
+      lease_try "$k" "$1" "$2" && { echo "$k"; return 0; }
+    done
+  done
+  return 1
+}
 lease_locked() { mkdir -p "$LEASES"; ( flock -w 10 9 || die "lease lock busy"; "$@" ) 9>"$LEASES/.lock"; }
 lease_holder() { # one line describing the holder of <key>
   local exp; exp="$(lease_get "$1" expires)"; local left=$(( ${exp:-0} - $(date +%s) ))
@@ -142,14 +184,24 @@ need_lease() { # <key>: die unless this session holds it
   if lease_live "$1"; then die "$(lease_holder "$1"). Wait with: ad -s $1 lease acquire --wait \"<purpose>\""; fi
   die "no lease on $1. Take it first: ad -s $1 lease acquire \"<purpose>\" (release it when done)"
 }
-lease_cmd() { # ad -s KEY lease acquire [--for MIN] [--wait] "purpose" | release | status
+lease_cmd() { # ad -s KEY lease acquire [--for MIN] [--wait] "purpose" | acquire --any ... | release | status
   local key="$1" sub="${2:-status}"; shift 2 || true
   case "$sub" in
     acquire)
-      local mins=30 wait=0 purpose=""
-      while [ $# -gt 0 ]; do case "$1" in --for) mins="$2"; shift 2 ;; --wait) wait=1; shift ;; *) purpose="$1"; shift ;; esac; done
+      local mins=30 wait=0 purpose="" any=0 allow4=0 got
+      while [ $# -gt 0 ]; do case "$1" in --for) mins="$2"; shift 2 ;; --wait) wait=1; shift ;; --any) any=1; shift ;; --allow-4th) allow4=1; shift ;; *) purpose="$1"; shift ;; esac; done
       [ -n "$purpose" ] || die "say what the lease is for: ad -s $key lease acquire \"<purpose>\""
       local deadline=$(( $(date +%s) + 30 * 60 ))
+      if [ $any = 1 ]; then
+        is_slot "$key" || die "--any picks an emulator slot; drop -s $key, or use -s emu"
+        while :; do
+          if got="$(lease_locked lease_try_any "$mins" "$purpose" "$allow4")"; then
+            echo "leased $got for $mins min: $purpose"; return
+          fi
+          [ $wait = 1 ] && [ "$(date +%s)" -lt $deadline ] || die "every emulator slot is leased$([ $allow4 = 1 ] || echo ' (emu4 needs --allow-4th, and the user'"'"'s OK)'):\n$(lease_status)"
+          echo "ad: every emulator slot is leased; waiting" >&2; sleep 20
+        done
+      fi
       while :; do
         if lease_locked lease_try "$key" "$mins" "$purpose"; then
           echo "leased $key for $mins min: $purpose"; return
@@ -159,31 +211,37 @@ lease_cmd() { # ad -s KEY lease acquire [--for MIN] [--wait] "purpose" | release
       done ;;
     release)
       lease_mine "$key" || { lease_live "$key" && die "$(lease_holder "$key"); not yours to release"; echo "no lease on $key"; return; }
-      if [ "$key" = emu ] && [ "$(lease_get emu started_emu)" = 1 ]; then
-        systemctl --user stop android-emulator && echo "emulator stopped (this lease started it)"
+      if is_slot "$key" && [ "$(lease_get "$key" started_emu)" = 1 ]; then
+        systemctl --user stop "$(slot_field "$key" unit)" && echo "$key stopped (this lease started it)"
       fi
       rm -f "$(lease_file "$key")"; echo "released $key" ;;
-    status)
-      local f k any=0
-      for f in "$LEASES"/*; do
-        [ -f "$f" ] || continue; k="$(basename "$f")"; any=1
-        if lease_live "$k"; then echo "$(lease_holder "$k")$([ "$(lease_get "$k" owner)" = "$OWNER" ] && echo ' (you)')"
-        else echo "$k: free (expired lease from $(lease_get "$k" owner))"; fi
-      done
-      [ $any = 1 ] || echo "no leases" ;;
-    *) die "usage: ad -s DEVICE lease acquire [--for MIN] [--wait] \"purpose\" | release | status" ;;
+    status) lease_status ;;
+    *) die "usage: ad -s DEVICE lease acquire [--for MIN] [--wait] \"purpose\" | release | status\n       ad lease acquire --any [--allow-4th] [--for MIN] [--wait] \"purpose\"   (first free emulator slot)" ;;
   esac
 }
+lease_status() {
+  local f k any=0
+  for f in "$LEASES"/*; do
+    [ -f "$f" ] || continue; k="$(basename "$f")"; any=1
+    if lease_live "$k"; then echo "$(lease_holder "$k")$([ "$(lease_get "$k" owner)" = "$OWNER" ] && echo ' (you)')"
+    else echo "$k: free (expired lease from $(lease_get "$k" owner))"; fi
+  done
+  [ $any = 1 ] || echo "no leases"
+}
 
-names() { [ -f "$TARGETS" ] && awk '!/^#/ && NF {printf "%s ", $1}' "$TARGETS"; echo emu; }
+names() { [ -f "$TARGETS" ] && awk '!/^#/ && NF {printf "%s ", $1}' "$TARGETS"; echo "emu emu2 emu3 emu4"; }
 
 TARGET="${ANDROID_SERIAL:-}"
-if [ "${1:-}" = "-s" ]; then TARGET="${2:?ad: -s needs a name, serial, model or 'emu'}"; shift 2; fi
+if [ "${1:-}" = "-s" ]; then TARGET="${2:?ad: -s needs a name, serial, model or emu|emu2..emu4}"; shift 2; fi
 cmd="${1:-help}"; shift || true
 
 case "$cmd" in
     lease) lease_cmd "$(lease_key "${TARGET:-emu}")" "$@"; exit ;;
-    emu)   [ "${1:-}" = start ] || [ "${1:-}" = stop ] && need_lease emu ;;
+    emu)   if [ "${1:-}" = start ] || [ "${1:-}" = stop ]; then
+             SLOT="$(lease_key "${TARGET:-emu}")"
+             is_slot "$SLOT" || die "emu start|stop needs -s emu|emu2|emu3|emu4"
+             need_lease "$SLOT"
+           fi ;;
 esac
 case "$cmd" in help|devices|emu) S="" ;; *) S="$(pick "$TARGET")" ;; esac
 
@@ -227,23 +285,37 @@ case "$cmd" in
   devices) # connected devices, then named targets that are not connected
     adb devices -l | awk 'NR>1 && NF'
     [ -f "$TARGETS" ] && awk '!/^#/ && NF {print "(target) " $1 " " $2}' "$TARGETS"
-    devices | awk -v s="$EMU_SERIAL" '$1==s {f=1} END {exit !f}' || echo "(emulator not running: ad emu start)" ;;
-  emu)     # ad emu start|stop|reap   (the local Android 16 emulator; only `start` boots it)
-    case "${1:-}" in
-      start) running=0; devices | awk -v s="$EMU_SERIAL" '$1==s {f=1} END {exit !f}' && running=1
-             ensure_emu
-             [ $running = 0 ] && lease_locked lease_write emu "$(lease_get emu expires)" "$(lease_get emu purpose)" 1 ;;
-      stop)  systemctl --user stop android-emulator && echo "emulator stopped" ;;
-      reap)  # run by emu-reaper.timer: stop an emulator that no live lease holds
-        systemctl --user is-active -q android-emulator || exit 0
-        lease_live emu && exit 0
-        up="$(systemctl --user show -p ActiveEnterTimestamp --value android-emulator)"
-        [ $(( $(date +%s) - $(date -d "$up" +%s) )) -lt $((15 * 60)) ] && exit 0   # just booted
-        pgrep -f 'gradle.*connected[A-Za-z]*AndroidTest' >/dev/null && exit 0     # instrumentation run
-        echo "ad: no live lease on emu; stopping the emulator (up since $up)"
-        rm -f "$(lease_file emu)"
-        systemctl --user stop android-emulator ;;
-      *)     die "usage: ad emu start|stop|reap" ;;
+    line=""; for k in $SLOTS; do   # one line: each slot, up or stopped, and who holds it
+      if slot_up "$k"; then st=up; else st=stopped; fi
+      if lease_live "$k"; then st="$st, leased"; else st="$st, free"; fi
+      line="$line$k ($st)  "
+    done
+    echo "emulators: ${line}| start: ad -s emuN emu start (emu4 needs --allow-4th and the user's OK)" ;;
+  emu)     # ad -s SLOT emu start [--allow-4th]|stop, ad emu reap   (local emulators; only `start` boots one)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      start) allow4=0; [ "${1:-}" = "--allow-4th" ] && allow4=1
+             [ "$SLOT" = emu4 ] && [ $allow4 = 0 ] && die "emu4 is the 4th emulator: 3 is the working limit. Ask the user first, then: ad -s emu4 emu start --allow-4th"
+             running=0; slot_up "$SLOT" && running=1
+             if [ $running = 0 ]; then
+               free="$(mem_free_gib)"
+               [ "$free" -ge "$MIN_FREE_GIB" ] || die "only $free GiB of memory is available (an emulator needs about 6, and $MIN_FREE_GIB must stay free); stop an emulator you no longer need"
+             fi
+             ensure_emu "$SLOT"
+             [ $running = 0 ] && lease_locked lease_write "$SLOT" "$(lease_get "$SLOT" expires)" "$(lease_get "$SLOT" purpose)" 1 ;;
+      stop)  systemctl --user stop "$(slot_field "$SLOT" unit)" && echo "$SLOT stopped" ;;
+      reap)  # run by emu-reaper.timer: stop each emulator that no live lease holds
+        for k in $SLOTS; do
+          slot_active "$k" || continue
+          lease_live "$k" && continue
+          up="$(systemctl --user show -p ActiveEnterTimestamp --value "$(slot_field "$k" unit)")"
+          [ $(( $(date +%s) - $(date -d "$up" +%s) )) -lt $((15 * 60)) ] && continue   # just booted
+          pgrep -f 'gradle.*connected[A-Za-z]*AndroidTest' >/dev/null && continue      # instrumentation run
+          echo "ad: no live lease on $k; stopping it (up since $up)"
+          rm -f "$(lease_file "$k")"
+          systemctl --user stop "$(slot_field "$k" unit)"
+        done ;;
+      *)     die "usage: ad -s emu|emu2|emu3|emu4 emu start|stop   (ad emu reap: timer)" ;;
     esac ;;
   serial)  echo "$S" ;;   # for mobilerun -d and ANDROID_SERIAL
   status)  echo "serial:  $S"
@@ -437,5 +509,7 @@ PROMPT
     sed -n '/^# ad —/,/^set -e/p' "$0" | head -3
     grep -E '^  [a-z|-]+\)' "$0" | sed -E 's/^  ([a-z|-]+)\).*/  \1/' | tr '\n' ' '; echo
     echo "  lease acquire|release|status: one driver per device; changing a device needs its lease"
+    echo "  emulator pool: -s emu (writable) and emu2..emu4 (read-only, reset on stop); 3 at once, the 4th needs --allow-4th and the user's OK"
+    echo "  lease acquire --any [--allow-4th] [--for MIN] [--wait] \"purpose\": lease the first free emulator slot"
     echo "  Docs: $HERE/SKILL.md" ;;
 esac

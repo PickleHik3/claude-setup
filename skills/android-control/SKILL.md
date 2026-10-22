@@ -31,12 +31,19 @@ $A help                   # every subcommand
   | `pong` | the user's Nothing Phone 2: Android 16 (API 36), arm64, 1080x2412 at 420 dpi, Adreno GPU | phone sign-off; what the user actually sees |
   | `surface` | Surface Pro 7 on Bliss OS 18.8 (the user's experimental Android 15 build): x86_64, 2736x1824 at 320 dpi, Mesa GPU | tablet and landscape layouts; Android 15 behavior |
 
-- `emu`, the local Android 16 emulator (AVD `tl16`, `emulator-5554`). It is a stock Pixel
-  7-like phone at 1080x2400 and 420 dpi with Google APIs, the same Android version as Pong,
-  and it runs arm64 apps through translation (install x86_64 builds where an app runs its
-  own native binaries). It is reachable only while running: with its lease held, run
-  `$A emu start` (about 80 s, KVM-accelerated, rendered on the CPU); releasing the lease
-  stops an emulator your lease started, and `emu-reaper.timer` stops one left up 15 min with no live lease.
+- `emu`, `emu2`, `emu3`, `emu4`: the local Android 16 emulators (`emulator-5554`, `-5556`,
+  `-5558`, `-5560`), each a stock Pixel 7-like phone at 1080x2400 and 420 dpi with Google
+  APIs, the same Android version as Pong, running arm64 apps through translation (install
+  x86_64 builds where an app runs its own native binaries). 3 at once is the working limit;
+  start the 4th (`$A -s emu4 emu start --allow-4th`) only after asking the user. `emu` (AVD
+  `tl16`) keeps installs and settings between boots; `emu2`-`emu4` (AVD `tl16b`) are
+  read-only and reset when stopped. So use `emu` when an install must persist, a pool slot
+  for parallel or throwaway checks. For "any emulator" take `$A lease acquire --any
+  "purpose"` (prefers one already running); parallel subagents each take their own slot. A
+  slot is reachable only while running: with its lease held, run `$A -s emuN emu start`
+  (about 80 s, KVM-accelerated, rendered on the CPU; refused under 8 GiB of free memory;
+  boots queue 20 s apart). Releasing the lease stops an emulator it started, and
+  `emu-reaper.timer` stops one left up 15 min with no live lease.
 - an exact serial, or a unique piece of the model or product name.
 
 With no `-s`, `ad` uses `$ANDROID_SERIAL`, then the only connected device. When several are
@@ -44,7 +51,7 @@ connected it refuses and lists them. Take the device from the request, and ask t
 when the request leaves it open.
 
 Never start Waydroid on this host, even by hand (`waydroid session start`): running it
-next to the emulator panicked the host kernel twice. Use `emu` instead.
+next to the emulator panicked the host kernel twice. Use an emulator instead.
 
 Every agent shares one adb server on port 5037. `ad` clears `ANDROID_ADB_SERVER_PORT`; keep
 it unset when calling `adb`, `mobilerun` or Gradle yourself, so all agents see the same
@@ -56,6 +63,7 @@ devices, so one driver at a time:
 
 ```bash
 $A -s emu lease acquire "verify palette chips"   # --wait to queue, --for MIN (default 30)
+$A lease acquire --any "purpose"                 # first free emulator slot, a running one first
 $A -s emu lease status                           # who holds what
 $A -s emu lease release                          # when done; stops an emulator your lease started
 ```
@@ -88,9 +96,9 @@ missing a step, end your report with the lines that should be added, so the next
   - Note `$A -s pong top` first, and leave the same app in front when you finish.
 - **Surface is the user's experimental Bliss OS build.** Treat it like a shared device (next
   bullet). Its OS is a test build, so separate OS glitches from app bugs before reporting.
-- **The emulator belongs to the agents.** It holds no user data, so it's the place for
+- **The emulators belong to the agents.** They hold no user data, so they're the place for
   destructive steps: clearing data, fresh installs, airplane mode, odd sizes. Other agents
-  share it, so the shared-device rule below still applies, and so does restoring what you
+  share them, so the shared-device rule below still applies, and so does restoring what you
   change.
 - **Shared devices:** run `$A top` before you act. If something other than
   the launcher or your own app is in front, another agent or the user is mid-flow, so ask.
