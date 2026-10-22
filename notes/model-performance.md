@@ -27,6 +27,18 @@ Verdict: equal on correctness and honesty; Opus more thorough in the write-up. N
 that justified Opus for an investigation of this size. A reproduction on pong afterwards agreed
 with both (Home page 1 stays).
 
+### 2026-10-22 · termux-launcher · "write the three-tier pong install rule into AGENTS.md, the releasing doc and the install script"
+
+`fixer` (Sonnet 5.5) alone. Docs plus a script comment, four files, the policy text given in the
+brief. 59k tokens, 6 tool calls, 47 s. Replaced every sentence of the old rule and listed each
+with file:line; added the two per-drop emulator checks and cross-referenced the existing
+migrations item instead of duplicating it. One gap, reported honestly: the brief asserted staging
+builds carry `+dev.<sha>`, the script only did that for release, and Sonnet wrote the doc claim
+as given rather than making the script true. It also said it had not counted the "sixteen"
+debug branches it quoted. Verdict: pass for a docs task; it does not fix a brief's false
+premise in code when told the code is out of scope, which is the rule, so the caller closed the
+gap (one script edit).
+
 ### Open questions to settle with later briefs
 
 - A change spanning 3+ files with a pure policy class and a test (the `fixer-opus` default).
