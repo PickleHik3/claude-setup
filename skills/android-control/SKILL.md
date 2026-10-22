@@ -39,7 +39,7 @@ $A help                   # every subcommand
   `tl16`) keeps installs and settings between boots; `emu2`-`emu4` (AVD `tl16b`) are
   read-only and reset when stopped. So use `emu` when an install must persist, a pool slot
   for parallel or throwaway checks. For "any emulator" take `$A lease acquire --any
-  "purpose"` (prefers one already running); parallel subagents each take their own slot. A
+  "purpose"` (a running slot first, pool slots before `emu`); parallel subagents each take their own slot. A
   slot is reachable only while running: with its lease held, run `$A -s emuN emu start`
   (about 80 s, KVM-accelerated, rendered on the CPU; refused under 8 GiB of free memory;
   boots queue 20 s apart). Releasing the lease stops an emulator it started, and

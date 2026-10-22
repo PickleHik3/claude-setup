@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: persistent-install-uses-emu
+expected_outcome: |
+  The agent uses the writable emu slot (AVD tl16), not a read-only pool slot, because pool slots emu2-emu4 reset installs when stopped.

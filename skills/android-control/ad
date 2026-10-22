@@ -159,7 +159,7 @@ lease_try() { # <key> <minutes> <purpose>: take or extend; exit 3 when someone e
 lease_try_any() { # <minutes> <purpose> <allow4>: lease the first free slot, a running one first; prints it
   local k pass
   for pass in running any; do
-    for k in $SLOTS; do
+    for k in emu2 emu3 emu emu4; do   # pool slots first, so throwaway work stays off emu's kept state
       [ "$k" = emu4 ] && [ "$3" != 1 ] && continue
       [ $pass = running ] && ! slot_up "$k" && continue
       lease_live "$k" && continue
