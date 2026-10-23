@@ -131,3 +131,28 @@ had to point it out.
 - Geometry or layout arithmetic (dock bands, pane shapes).
 - A bug whose cause is unknown and needs a reproduction on the emulator.
 - Review of another worker's diff.
+
+### 2026-10-23: tlstore, herdr built from source for bionic (fixer, Sonnet 5.5)
+
+Two runs. The spike was 97k / 31 tools / 16 min, with no cause given beyond the seccomp kill. It
+stopped correctly at the first blocker (build.rs rejects android, the build needs Zig), proposed
+options, then got libghostty-vt plus Rust building for both arches when told to go on. It found the
+`target_os = "linux"` gating itself, and suggested a sed over a big patch. The wiring run was
+134k / 53 tools / 25 min across 9 files (recipe, patch, CI, upstream-watch, tests, docs). The
+x86_64 asset worked on the device first time and the suite stayed at 0 failed. It kept
+upstream-watch's asset mode covered with a fixture. One miss: it left the launcher script calling
+the binary "upstream's own".
+Verdict: pass. A cross-compile investigation with unknown blockers is within Sonnet's range when
+the brief says to stop at a heavy blocker. It does not reread comments copied verbatim.
+
+### 2026-10-23: #143 status bar row geometry seam (fixer, Sonnet 5.5)
+
+One run, 71k / 23 tools / 2.6 min. Brief gave the three activity sites with their arithmetic and asked
+for a pure `rowGeometry` value plus tests, in two commits (module, then activity) so a parallel worker
+in the same file could merge first. It reproduced the arithmetic exactly, moved the duplicated `22`
+literal to a named constant, wrote three tests over edge × capsule × compact × collapsed × 3 densities,
+kept the compare-before-set writes, and reported the two open choices it made (compact = collapsed in the
+rest pass; edge passed to the fold pass although rows don't depend on it) and that the value's
+`thickness` field is unused by both passes. Merged unchanged.
+Verdict: pass. A specified arithmetic seam with named call sites is comfortably within Sonnet's range;
+next notch: a seam where the call sites are not listed.
