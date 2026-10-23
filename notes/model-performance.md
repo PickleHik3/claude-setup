@@ -156,3 +156,14 @@ rest pass; edge passed to the fold pass although rows don't depend on it) and th
 `thickness` field is unused by both passes. Merged unchanged.
 Verdict: pass. A specified arithmetic seam with named call sites is comfortably within Sonnet's range;
 next notch: a seam where the call sites are not listed.
+
+### 2026-10-23: #147 delete the dock icon reflection (fixer, Sonnet 5.5)
+
+One run, 123k / 43 tools / 5 min. Brief gave the owner class, the shader's uniform and draw sites,
+the activity's binding sites and the feeding view from a survey. It deleted 800 lines across 10
+files, kept the activity in its own commit as asked, fixed five stale test assertions, added a
+negative test on the AGSL source, reported which `reflect` references it left and why, and named
+two callers (drawnPageOffsetPx, onOverflowPagePositionChanged) that are now unused. Two javadoc
+lines rejoined past 100 columns; fixed at merge.
+Verdict: pass. A guided deletion across ten files is within range; next notch: a deletion with no
+survey, where it must find the owner itself.
