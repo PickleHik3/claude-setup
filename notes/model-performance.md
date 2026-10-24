@@ -220,3 +220,11 @@ filled MaterialButtons drew invisible text under Robolectric and worked around i
 deviations (chevron direction, tile tint, title gap) fixed at review.
 Verdict: pass. A mockup-matched UI rebuild is within range when the image is in the brief; next
 notch: geometry with measured rules and no image.
+
+## 2026-10-24 — fixer (Sonnet 5.5): dev patch, headless X test display + pinned wrapper download
+Port of a bash script change (free display pick, reliable server stop on every exit path, sha256-
+pinned download routed into existing cleanup) plus a three-path Java guard, with the method fully
+specified in the brief. Clean, shellcheck-clean, tests added, honest about what it could not check.
+One miss at review: the fallback `pkill -f "…:$N -ac"` also matched `:1N`.
+Verdict: pass. Specified multi-file shell+Java patches are in range; next notch: one where the
+method has to be derived (e.g. reading native code to answer a behavioural question).
