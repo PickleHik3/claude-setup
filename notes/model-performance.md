@@ -185,3 +185,38 @@ needs an unknown root cause first, or geometry with measured rules.
 Clock widget period stacked over the seconds by reusing the status bar's path, removing the
 inline path; found and fixed a dp/sp tracking bug on the way; flagged a width workaround it did
 not root-cause. Verdict: pass with a flag.
+
+## 2026-10-24 evening · fixer (Sonnet 5.5) · remove a gating pref, add a gesture switch
+
+Drop the "Swipe down for app drawer" switch (treat the drawer as always on) and add a quick-reply
+swipe switch. One run, 75k / 18 tools / 4 min. Brief named the page, the gating sites from a grep and
+the quick-reply wiring entry points. It found every gate (including warm-up and the package-change
+receivers), gated quick reply at the two decision points so a badged icon behaves as an unbadged one,
+fixed three tests and the docs, and flagged the always-true `consumesPackageChanges` change for review.
+Left always-true parameters in place because tests implement them, and said so.
+Verdict: pass. Next notch: a settings change where the gate sites are not surveyed in the brief.
+
+## 2026-10-24 evening · fixer (Sonnet 5.5) · editor hidden-items stack (geometry + drag + per-half state)
+
+Two parts: 3-choice segment rows inline with shrunk text, folder-limit removal; then a stack of
+equal cards left of the live frame listing hidden items, frame shifted right, drag to hide/show,
+Home and Workspace always separate. One run, 215k / 67 tools / 14 min. It found why Numerals went
+inline (2 choices only), added a pure HiddenStackPolicy (card size, shared label fit) with tests,
+a Reserve on EditorFramePose for the shift, and a lazy "own Home layout" fork before the first
+hide/show. Gaps it reported itself: Search field and Drawer tile can't be dragged (no canvas block),
+and the shrink applies to every 3-choice row, not only the two asked for. Not yet device-checked.
+Verdict: pass with gaps (pending device check). Geometry with measured rules plus drag wiring is
+reachable; it narrowed scope where the canvas lacked a block instead of building one.
+
+## 2026-10-24 evening · fixer (Sonnet 5.5) · built-in widget settings sheet, two rounds
+
+Round 1 from a written spec (compact dialog, X, single Save, ⓘ help, Additional clocks): 86k / 21
+tools / 5 min, clean diff, tests green; icon right edges off by 5–14dp and sections too loose, fixed
+by hand after measuring. The developer then rejected the spec's direction for their own mockup.
+Round 2, resumed with the mockup image + Codex glyphs: 165k / 33 tools / 11 min. It rebuilt the
+sheet as a BottomSheetDialog of cards, matched the mockup closely, and on its own added a
+Robolectric native-graphics preview PNG, which replaced emulator checks. Flagged honestly that
+filled MaterialButtons drew invisible text under Robolectric and worked around it. Three small
+deviations (chevron direction, tile tint, title gap) fixed at review.
+Verdict: pass. A mockup-matched UI rebuild is within range when the image is in the brief; next
+notch: geometry with measured rules and no image.
