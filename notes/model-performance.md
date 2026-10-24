@@ -167,3 +167,21 @@ two callers (drawnPageOffsetPx, onOverflowPagePositionChanged) that are now unus
 lines rejoined past 100 columns; fixed at merge.
 Verdict: pass. A guided deletion across ten files is within range; next notch: a deletion with no
 survey, where it must find the owner itself.
+
+## 2026-10-24 night · fixer (Sonnet 5.5) · a new full-screen stepped flow from a spec + wireframe
+
+Task: replace the "Set up Linux apps" preference page with a stepped guide (steps vary by edition
+and source, progress pills, Back/Next footer, selection cards with a wrapping badge), keep every
+key and the command builder, reword the Input page, docs. One run, 179k / 43 tools / 10 min.
+It built the fragment in code (717 lines) plus a pure policy class with tests for step lists per
+edition/source and for font scale 1.3/2.0 fit, registered it in SettingsTree, aliased the old
+class, and correctly refused the spec's wrong line about the nix edition (no routes → no steps)
+instead of inventing one. Not device-checked by it (rules).
+Verdict: pass. A new multi-step UI from a wireframe is within range; next notch: a change that
+needs an unknown root cause first, or geometry with measured rules.
+
+## 2026-10-24 night · fixer (Sonnet 5.5) · two small fixes (clock meta column, pref default)
+
+Clock widget period stacked over the seconds by reusing the status bar's path, removing the
+inline path; found and fixed a dp/sp tracking bug on the way; flagged a width workaround it did
+not root-cause. Verdict: pass with a flag.
