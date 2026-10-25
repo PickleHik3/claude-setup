@@ -180,7 +180,7 @@ lease_touch() { # extend my lease on every command that changes the device
 }
 need_lease() { # <key>: die unless this session holds it
   [ "${AD_NO_LEASE:-0}" = 1 ] && return
-  lease_mine "$1" && { lease_locked lease_touch "$1"; is_slot "$1" && seen_check "$1"; return; }
+  lease_mine "$1" && { lease_locked lease_touch "$1"; if is_slot "$1"; then seen_check "$1"; fi; return 0; }
   if lease_live "$1"; then die "$(lease_holder "$1"). Wait with: ad -s $1 lease acquire --wait \"<purpose>\""; fi
   local was=""; is_slot "$1" && [ -f "$SEEN/$1.$OWNER" ] && was=" You drove $1 before: it may have been reaped or used by another session since, so check what is installed before you rely on it."
   die "no lease on $1. Take it first: ad -s $1 lease acquire \"<purpose>\" (release it when done).$was"
