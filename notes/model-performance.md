@@ -230,3 +230,17 @@ Verdict: pass. Specified multi-file shell+Java patches are in range; next notch:
 method has to be derived (e.g. reading native code to answer a behavioural question).
 
 - 2026-10-25 fixer (Sonnet 5.5), unknown-cause regression (keyboard/extra-keys glass cut after a dock merge), diagnosed by reading diffs: found a coherent cause (stale card rect shaping shared glass with the keyboard up), small fix, said plainly it was unreproduced; skipped the unit test, citing another worker's file ownership. Outcome: FAIL on pong — the real cause was the host glass layers laid out at the card inset (32,95), which a dumpsys of the view tree showed at once; the code-reading theory was plausible but wrong. Lesson: for a visual regression, give fixer a view-tree dump, not only diffs.
+
+## 2026-10-25 · fixer (Sonnet 5.5) · extra keys editor rebuilt to wireframes + unknown-cause bug
+
+Brief: find why Page 2 can't take a new key (cause unknown), then rebuild a 940-line settings editor
+to a five-screen HTML wireframe, with pure draft logic. One run, 243k / 84 tools / 18 min. It drove
+the old editor's Page 2 path in Robolectric and said plainly it could not reproduce the bug rather
+than inventing a cause. The rebuild was clean: a pure ExtraKeysDraft with Undo snapshots, picker
+catalog, option sheets, tests, and native-graphics renders of every screen in both themes. It
+reported every spec deviation honestly. Review fixes, made by hand: the drag handle used a 3-bar
+icon that read as the ⋮ beside it; Reset sat on its own line because it assumed an app-bar action
+needed SettingsActivity changes (a fragment MenuProvider does it); an empty page still needed
+"Add row" before any + showed, which is the reported trap again.
+Verdict: pass with review fixes. A mockup-matched rebuild of a whole screen is in range; it misses
+framework shortcuts (MenuProvider) and judges by "matches the spec" more than "solves the complaint".
