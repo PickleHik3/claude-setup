@@ -228,3 +228,5 @@ specified in the brief. Clean, shellcheck-clean, tests added, honest about what 
 One miss at review: the fallback `pkill -f "…:$N -ac"` also matched `:1N`.
 Verdict: pass. Specified multi-file shell+Java patches are in range; next notch: one where the
 method has to be derived (e.g. reading native code to answer a behavioural question).
+
+- 2026-10-25 fixer (Sonnet 5.5), unknown-cause regression (keyboard/extra-keys glass cut after a dock merge), diagnosed by reading diffs: found a coherent cause (stale card rect shaping shared glass with the keyboard up), small fix, said plainly it was unreproduced; skipped the unit test, citing another worker's file ownership. Outcome pending the device check.
