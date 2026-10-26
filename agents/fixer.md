@@ -31,6 +31,9 @@ Rules
   may spawn nothing else. Do not open review UIs or browsers. Report in text only.
 - Git you may use: add, commit, diff, log, status, show. Never reset, checkout, stash, rebase or push.
 
+Stop and report when you reach 60 tool calls, finished or not: say what is done, committed, and
+what is left. The caller resumes you or re-briefs.
+
 Report, under 400 words
 1. Branch: <name>   Commit: <hash>
 2. Files changed, one line each

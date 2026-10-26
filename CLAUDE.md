@@ -8,7 +8,7 @@ in files already in context stay here.
 |---|---|---|
 | Explore | Haiku, low | Read-only: search, read code, logs or docs, return the conclusion. |
 | fixer | Sonnet, medium | A specified change, docs, mechanical edits; device-check driving. |
-| fixer-opus | Opus, high | Geometry, layout, design, policy with arithmetic, diff review, bugs whose cause is unknown. |
+| fixer-opus | Opus, medium | Geometry, layout, design, policy with arithmetic, diff review. Raise to high in the brief for one task with arithmetic or an unknown cause, never as a habit. |
 
 - From 2026-10-22: hand `fixer` (Sonnet 5.5) tasks that would go to `fixer-opus`, one notch harder
   each time, to find its upper limit; keep `fixer-opus` for what `notes/model-performance.md`
@@ -19,6 +19,12 @@ in files already in context stay here.
   model-gate hook enforces both.
 - Workers never use skills.
 - Effort stays at the agent's default; raise it for one hard task, never as a habit.
+- Reuse a worker. One long-lived worker per area of code (SendMessage resumes it with what it has
+  read), tasks sent to it one after another; retire it when it compacts or the area changes, and
+  start the next with a brief that carries exact anchors. The token figure in a task notice is
+  cumulative spend, not the live window; the ceiling that matters is the first compaction.
+  2026-10-26: a fresh worker spent about a hundred tool calls finding its way around a 25k-line
+  file before its first edit.
 
 # Worktree round trip
 
@@ -58,6 +64,15 @@ in files already in context stay here.
 
 Goal · Files in scope · Constraints · What is already known · Report format (branch, hash, files,
 verify-first, device checks owed — recorded where the project says)
+
+- Anchors, not areas: every file in scope comes with the method names and line numbers the
+  worker will edit, verified at the base commit by this session or a scout. A file over 5k lines
+  gets the exact slice, never "~:23150".
+- Builders build. No "find the cause" in a fixer brief; cause-finding goes to Explore or a
+  reproduction step first, and the builder gets the cause and the reproduction.
+- One goal per brief, and a cap: the worker reports at 60 tool calls even if unfinished. Media
+  (recordings, frame dumps, pages) never go to a builder; the brief carries the timeline or the
+  numbers read from them.
 
 # Lavish
 

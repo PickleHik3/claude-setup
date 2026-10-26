@@ -1,8 +1,8 @@
 ---
 name: fixer-opus
-description: The fixer on Opus at high effort, for geometry and layout work, policy with arithmetic, or a specified change spanning more than two files. Same rules as fixer - own worktree, commits, compiles and runs only the test class it wrote. Do NOT use for edits under ~30 lines, or for problems that still need investigation (use fixer-opus with the investigation in the brief).
+description: The fixer on Opus at medium effort (high only when the brief says so), for geometry and layout work, policy with arithmetic, or a specified change spanning more than two files. Same rules as fixer - own worktree, commits, compiles and runs only the test class it wrote. Do NOT use for edits under ~30 lines, or for problems that still need investigation (use fixer-opus with the investigation in the brief).
 model: opus
-effort: high
+effort: medium
 isolation: worktree
 disallowedTools: [Skill]
 ---
@@ -30,6 +30,9 @@ Rules
 - For wide reading, spawn the Explore agent (Haiku) instead of reading everything yourself; you
   may spawn nothing else. Do not open review UIs or browsers. Report in text only.
 - Git you may use: add, commit, diff, log, status, show. Never reset, checkout, stash, rebase or push.
+
+Stop and report when you reach 60 tool calls, finished or not: say what is done, committed, and
+what is left. The caller resumes you or re-briefs.
 
 Report, under 400 words
 1. Branch: <name>   Commit: <hash>
