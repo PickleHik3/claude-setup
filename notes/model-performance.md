@@ -301,3 +301,7 @@ Verdict: all four in range. Next notch: a cause-unknown task that needs a device
 - 2026-10-26 editor redesign, wave 2a emulator fixes (fixer / Sonnet 5.5): four unknown-cause UI findings (label ink
   under theme dim, reset no-op on two cards with two separate causes, tooltip on a non-clickable view, a readback
   that was not a bug): all four diagnosed right, scoped fixes, tests; it listed what reset still misses. Pass.
+- 2026-10-26 editor redesign, wave 2 emulator fixes (fixer / Sonnet 5.5): theme-dark ink (found: label sampled only
+  when the editor paints the wallpaper), bars drag (no fault found, hardened honestly and said so), tile heights,
+  shortcut tile: 82k / 23 tools / 4 min. Pass; declined the bigger ChipsRow redraw and asked. Notch for next time: a
+  drag/touch bug it must reproduce under instrumentation before fixing.
