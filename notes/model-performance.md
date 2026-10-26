@@ -305,3 +305,6 @@ Verdict: all four in range. Next notch: a cause-unknown task that needs a device
   when the editor paints the wallpaper), bars drag (no fault found, hardened honestly and said so), tile heights,
   shortcut tile: 82k / 23 tools / 4 min. Pass; declined the bigger ChipsRow redraw and asked. Notch for next time: a
   drag/touch bug it must reproduce under instrumentation before fixing.
+- 2026-10-26 editor redesign, dock command-palette tile (fixer / Sonnet 5.5, a new dock element across designs):
+  followed the Drawer-tile pattern, pure policy + tests, honest about the one geometry gap (bead pinning only pins one
+  tile, so its tile slides mid-swipe) and left it. Pass with a geometry follow-up for Opus.
