@@ -244,3 +244,54 @@ needed SettingsActivity changes (a fragment MenuProvider does it); an empty page
 "Add row" before any + showed, which is the reported trap again.
 Verdict: pass with review fixes. A mockup-matched rebuild of a whole screen is in range; it misses
 framework shortcuts (MenuProvider) and judges by "matches the spec" more than "solves the complaint".
+
+## 2026-10-25 · fixer (Sonnet 5.5) · VN CRM ticket 37: hand-over from the access list (page + policy + server API)
+Brief gave the goal and pointed at the files; the method was half-derived (it found `takers` in vn_staff_read itself,
+extended vn_access_change with a param instead of bypassing it, and kept decide-before-write). 138k / 43 tools / 6 min.
+Offline driver + 126 staff harness checks green; reported plainly that the live write path is untested. Review found
+nothing to fix. Verdict: pass. A specified multi-file feature across JS page, pure policy and RestrictedPython API is in
+range; next notch: a feature where the brief gives only the goal and no file pointers.
+
+## 2026-10-25 · fixer (Sonnet 5.5) · VN CRM Deal Export/Import buttons (Frappe source research + perms ownership)
+Brief named goal, a few files and where to read Frappe's installed source; the method was mostly derived. 81k / 25 tools /
+2 min. It found by reading data_import.py that Deal's DocType-level allow_import was off (would have failed even with the
+right), and that the seed never overwrites existing perm rows, so it introduced a code-owned flag rather than a silent no-op.
+Reported plainly what was unverified (rendering, dialog). Review found nothing to fix before live.
+Verdict: pass. Research-then-build against third-party framework source is in range; next notch: goal-only brief, no files.
+
+## 2026-10-25 · fixer (Sonnet 5.5) · Termux Launcher power-user round, wave 1 (four tasks)
+- Drawer hides Home (Host seam + pure policy): 78k / 23 tools / 4 min. Chose alpha on the whole widget pane to avoid
+  colliding with page-transition alphas on its children, and flagged that float panes fade too. Review: nothing to fix.
+- Widget picker under the dock: 63k / 10 tools / 4 min. Found the real cause (picker MATCH_PARENT in the pane, dock band
+  only given to grid and dots) and reused the measured reserve. Admitted it did not compare with other sheets as asked.
+  Side effect it did not mention: the scrim no longer covers the dock, so the dock stays tappable. Pass.
+- Theme hint bubble: 84k / 21 tools / 4 min. Clean; kept the pref out of backups via the existing first_run_ prefix.
+  Minor: hint appears at full alpha while the bar fades in. Pass.
+- Hardware keys (the notch-harder task, cause unknown, brief's suspected cause wrong): 98k / 29 tools / 5 min. Could
+  not reproduce in Robolectric, stopped as told, and showed with file:line why the brief's hypothesis was wrong, then
+  named the likelier cause (focus on a third view) and a real gap in the Android-keyboard field. Pass: stop-and-report
+  on a wrong hypothesis is in range.
+- Accessibility (ExploreByTouchHelper on a drawn palette + popup window): 156k / 40 tools / 7 min. Correct virtual-view
+  tree, invalidation only on content change, separate strings file to avoid parallel conflicts; honest that the popup
+  fix is unconfirmed. Pass.
+Verdict: all four in range. Next notch: a cause-unknown task that needs a device-level reproduction.
+
+## 2026-10-25 · fixer (Sonnet 5.5) · Termux Launcher follow-ups + pin requests (goal-only notch)
+- Contrast level + dim blend (arithmetic in a pure policy, renderer wiring): 96k / 21 tools / 4 min. Correct mapping from
+  the existing contrast levels, flagged a real WCAG edge (saturated hues) honestly. Pass.
+- A–Z warm on touch: 93k / 21 tools / 4 min. Reused the existing prefetch and budgeted cache instead of new machinery;
+  fixed the side finding. Pass.
+- Drawer arrow-key highlight in three view types (a previous Sonnet called it too large): 116k / 19 tools / 5 min. Did
+  all three; one misplaced Javadoc. Pass.
+- Lock layout switch: replaced the existing lock rows rather than adding a second control (good judgement) but shipped a
+  half-width row that clipped and a card that slid off on toggle; both found on the emulator and fixed by hand. Pass with
+  fixes: it does not check bottom-sheet behaviour when content height changes.
+- Settings reopen timer: found the older 30-minute persisted stack itself and gated it. Pass.
+- Pin requests, goal-only brief (manifest, confirm activity, placement, widget bind, target-28 reasoning): 213k / 50 tools
+  / 11 min. Flow and per-edition handling right; it built a legacy INSTALL_SHORTCUT receiver it knew could never fire and
+  accepted before writing. Both fixed on a review round. Pass with review fixes. Next notch: a goal-only brief that needs
+  a device-level reproduction.
+- 2026-10-26 editor redesign, wave 1 emulator fixes (fixer / Sonnet 5.5): four findings, causes unknown in the brief
+  (door lost on page switch, dark-theme label ink, door table change, shared Frost key): 85k / 30 tools / 6 min. Found
+  all four causes, fixed at the seams with tests, no scope creep. The Frost fix keeps per-half position in a
+  session-only map (a workaround it flagged itself). Pass. Next notch: a geometry change with screenshots to match.
