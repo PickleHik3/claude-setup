@@ -311,3 +311,8 @@ Verdict: all four in range. Next notch: a cause-unknown task that needs a device
 - 2026-10-26 editor redesign, wave 4b icons/words sweep (fixer / Sonnet 5.5, app-wide, 21 files + docs): correct
   reading of "which icon means what", drew two 24dp glyphs itself, kept proper nouns, confirmed a door instead of
   changing it. Pass; glyph legibility owed on device.
+- 2026-10-26 editor redesign, Change wallpaper tile (fixer / Sonnet 5.5): clean, followed the shortcut-tile pattern, left
+  dead code deliberately to avoid another worker's files and said so. Pass.
+- 2026-10-26 editor redesign, page-label ink (fixer-opus): asked to reproduce on the emulator; refused per its rules +
+  the 10-24 ban memory, fixed from code with a plausible root cause (storage permission denies the wallpaper read).
+  Note: briefs that need a device must go to device-checker, or the rule must say the developer allowed it.
