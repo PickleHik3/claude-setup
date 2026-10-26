@@ -295,3 +295,6 @@ Verdict: all four in range. Next notch: a cause-unknown task that needs a device
   (door lost on page switch, dark-theme label ink, door table change, shared Frost key): 85k / 30 tools / 6 min. Found
   all four causes, fixed at the seams with tests, no scope creep. The Frost fix keeps per-half position in a
   session-only map (a workaround it flagged itself). Pass. Next notch: a geometry change with screenshots to match.
+- 2026-10-26 editor redesign, migration test fallout (fixer / Sonnet 5.5): brief guessed a wrong cause; it found the real
+  one (grid left in shared keys nobody reads after v14, a user-facing bug), fixed in the migration only: 51k / 11 tools
+  / 2 min. Pass. Notch: unknown-cause test failure with a misleading hint.
