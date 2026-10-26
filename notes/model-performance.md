@@ -308,3 +308,6 @@ Verdict: all four in range. Next notch: a cause-unknown task that needs a device
 - 2026-10-26 editor redesign, dock command-palette tile (fixer / Sonnet 5.5, a new dock element across designs):
   followed the Drawer-tile pattern, pure policy + tests, honest about the one geometry gap (bead pinning only pins one
   tile, so its tile slides mid-swipe) and left it. Pass with a geometry follow-up for Opus.
+- 2026-10-26 editor redesign, wave 4b icons/words sweep (fixer / Sonnet 5.5, app-wide, 21 files + docs): correct
+  reading of "which icon means what", drew two 24dp glyphs itself, kept proper nouns, confirmed a door instead of
+  changing it. Pass; glyph legibility owed on device.
