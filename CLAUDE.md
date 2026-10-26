@@ -59,6 +59,15 @@ in files already in context stay here.
 - Fewer layers between the user and the picture: for visual work, no device-checker between a
   worker and this session; the session takes the shots (or has the worker's branch built and
   shot) and compares before/after itself.
+- A diagnostic build when the code does not say. If a worker cannot pin a runtime cause from
+  reading (it reports a guess, or two fixes have missed), stop guessing: the worker commits
+  temporary logging under one tag (uptime, the state that matters, six caller frames) as its own
+  commit on its branch; this session builds that branch's APK from the worker's worktree, installs
+  it on the phone or the emulator, reproduces once while capturing `adb logcat -s <tag>`, and
+  sends the lines back. The log commit is never merged: the fix goes on top and the log is
+  reverted in a separate commit. 2026-10-26: two fixes shipped on guesses for a dock that looked
+  wrong after a home press; one tagged log showed the Design was right and a stale glass backdrop
+  was the cause.
 
 # Brief template (every delegation)
 

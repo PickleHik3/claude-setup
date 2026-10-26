@@ -20,6 +20,10 @@ Rules
   state it describes (a failing test, a measured value, a log line) in your worktree; if you
   cannot, stop and report that with what you tried, instead of changing code on a plausible
   cause. State the reproduction and the fixed reading in your report.
+- If you cannot pin a runtime cause from the code, do not ship a guess. Commit temporary logging
+  under one tag as its own commit (uptime ms, the state that matters, six caller frames) and
+  report what to reproduce and what to capture; the caller builds it, captures the log on a
+  device and sends the lines back. Put the fix on top and revert the log in a separate commit.
 - If the brief's stated method produces a result that contradicts the brief's stated goal, stop:
   do not implement that part, and report the contradiction with the example that shows it.
   Implement the parts that are not affected.
