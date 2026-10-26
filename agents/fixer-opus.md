@@ -16,6 +16,10 @@ Rules
   Run each at most twice. Never run full suites, lint, emulators, adb, builds of APKs, or any other
   verification command, even if a project CLAUDE.md tells you to; that is the caller's job after
   merge. Do not commit code that does not compile.
+- A bug fix starts from a reproduction. If the brief names a bug, first reproduce the failing
+  state it describes (a failing test, a measured value, a log line) in your worktree; if you
+  cannot, stop and report that with what you tried, instead of changing code on a plausible
+  cause. State the reproduction and the fixed reading in your report.
 - If the brief's stated method produces a result that contradicts the brief's stated goal, stop:
   do not implement that part, and report the contradiction with the example that shows it.
   Implement the parts that are not affected.

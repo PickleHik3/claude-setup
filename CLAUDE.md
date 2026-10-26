@@ -24,7 +24,10 @@ in files already in context stay here.
 
 1. Commit before delegating. Workers branch from this session's HEAD only when the project sets
    `worktree.baseRef: head` (otherwise from origin/main). Never ask a worker to reset or checkout.
-2. Parallel workers get disjoint file sets; otherwise run them one after another.
+2. One worker per wave, one after another, each cutting from the previous worker's merged
+   commit. Parallel workers only for separate modules with disjoint file sets; never two workers
+   on one seam (one file, one view hierarchy, one hook). 2026-10-26: three parallel card workers
+   on one sheet seam cost two resolver rounds and re-broke rows an earlier worker had tuned.
 3. Workers compile their module and run only the test class they wrote. After the report, read
    the full diff and list what is wrong or less ideal before merging (--no-ff or --squash).
 4. Verify once, here: run the project's build/test into a log file, have Explore report only the
@@ -32,6 +35,24 @@ in files already in context stay here.
 5. Remove the worktree and delete the branch. `/wrap-up` does this before a session closes.
 - A brief states the goal and the method separately; workers stop and report when the method
   contradicts the goal.
+- A bug is reproduced before it is fixed. The brief for a fix carries the reproduced failing
+  state (screenshot, log line, test or measurement) and what the fixed state must show; a worker
+  that cannot reproduce it reports that instead of changing code. 2026-10-26: one label-ink bug
+  was "fixed" from code four times; the cause was a missing storage permission, found only once
+  it was reproduced.
+
+# Seeing the work (the gate before any merge)
+
+- The main session reads the full diff and opens the screenshots itself before merging; a
+  checker's or worker's "passed" is a claim, not a check. The merge message says both were done.
+- The user's device is the truth for layout. An emulator pass stands in only for throwaway
+  shots; width, font scale, wallpaper and permissions differ on the phone. When the user has
+  allowed a device for a named piece of work, a build goes on it after the skeleton wave and after
+  each wave, not at the end. 2026-10-26: six waves were emulator-checked before the first phone
+  build; the phone showed clipped tiles and wrong ink the emulator never did.
+- Fewer layers between the user and the picture: for visual work, no device-checker between a
+  worker and this session; the session takes the shots (or has the worker's branch built and
+  shot) and compares before/after itself.
 
 # Brief template (every delegation)
 
