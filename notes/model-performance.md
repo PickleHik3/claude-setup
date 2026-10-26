@@ -298,3 +298,6 @@ Verdict: all four in range. Next notch: a cause-unknown task that needs a device
 - 2026-10-26 editor redesign, migration test fallout (fixer / Sonnet 5.5): brief guessed a wrong cause; it found the real
   one (grid left in shared keys nobody reads after v14, a user-facing bug), fixed in the migration only: 51k / 11 tools
   / 2 min. Pass. Notch: unknown-cause test failure with a misleading hint.
+- 2026-10-26 editor redesign, wave 2a emulator fixes (fixer / Sonnet 5.5): four unknown-cause UI findings (label ink
+  under theme dim, reset no-op on two cards with two separate causes, tooltip on a non-clickable view, a readback
+  that was not a bug): all four diagnosed right, scoped fixes, tests; it listed what reset still misses. Pass.
