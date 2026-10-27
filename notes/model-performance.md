@@ -316,3 +316,15 @@ Verdict: all four in range. Next notch: a cause-unknown task that needs a device
 - 2026-10-26 editor redesign, page-label ink (fixer-opus): asked to reproduce on the emulator; refused per its rules +
   the 10-24 ban memory, fixed from code with a plausible root cause (storage permission denies the wallpaper read).
   Note: briefs that need a device must go to device-checker, or the rule must say the developer allowed it.
+- 2026-10-27 termux-launcher legibility wave 1, pair-table palette solver (fixer / Sonnet 5.5, policy with arithmetic):
+  correct solver + grid + export check; flagged a real infeasibility (Harder 6:1 vs panel 3:1) instead of hiding it;
+  did not run the probe red before editing; its test Javadoc overclaimed one exemption. Pass with review fixes.
+- 2026-10-27 termux-launcher legibility wave 2a, EvenOut band maths (fixer / Sonnet 5.5): faithful to the brief, honest
+  about a brief contradiction; needed three review fixes (identity for fitting ranges, slack in place of a margin, Softer
+  ordering). Pass.
+- 2026-10-27 termux-launcher legibility wave 2b, wiring + ColorMatrix render across ChromeInk/PaneGlass/TermuxActivity
+  (fixer / Sonnet 5.5, multi-file pipeline): built what the spec said, but the spec placed the band in the wallpaper's
+  tone domain while the ceiling is about the composited ground (frost + tint lift ~25 -> ~59 on pong). Unit tests green,
+  device showed the band mid-tone; caught only by the pong pixel check. Also a memo that missed every call (review).
+  Lesson: the brief/spec error was mine; for render pipelines, require an on-device or composited-domain assertion in
+  the worker's own test, not only policy tests.
