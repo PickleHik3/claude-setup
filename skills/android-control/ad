@@ -362,9 +362,14 @@ case "$cmd" in
   # --- goals: codex ------------------------------------------------------------------
   codex)   # ad codex "goal" [-m MODEL]   (Codex CLI drives the device through ad; same lease)
            # AD_CODEX_SANDBOX=danger-full-access lifts the sandbox (ssh, paths outside the workdir).
-    case "${1:-}" in ""|-h|--help) die "usage: ad -s DEVICE codex \"goal\" [codex exec flags]" ;; esac
+    case "${1:-}" in ""|-h|--help) die "usage: ad -s DEVICE codex \"goal\" [--map FILE] [codex exec flags, e.g. -m MODEL --json]" ;; esac
     sandbox="${AD_CODEX_SANDBOX:-workspace-write}"
     goal="$1"; shift
+    # The app's map (docs/agents/device-map.md) goes into the prompt so Codex follows it instead
+    # of exploring: --map FILE, else $AD_MAP, else ./docs/agents/device-map.md if it exists.
+    map="${AD_MAP:-}"; [ -z "$map" ] && [ -f docs/agents/device-map.md ] && map="$PWD/docs/agents/device-map.md"
+    if [ "${1:-}" = --map ]; then map="$2"; shift 2; fi
+    [ -z "$map" ] || [ -f "$map" ] || die "map not found: $map"
     work="$(mktemp -d "${TMPDIR:-/tmp}/ad-codex.XXXXXX")"
     cat > "$work/PROMPT.md" <<PROMPT
 You drive one Android device through the \`ad\` tool. Use only commands of this form:
@@ -379,6 +384,10 @@ Goal: $goal
 Finish with: the end state you saw (from ui or top), each step you took as an ad command, and
 anything that looked wrong. Save any screenshots under $work.
 PROMPT
+    if [ -n "$map" ]; then
+      { printf '\n## The app'"'"'s map\nFollow it instead of exploring; its adb lines run as `%s/ad -s %s adb shell ...`.\n\n' "$HERE" "${TARGET:-$S}"
+        cat "$map"; } >> "$work/PROMPT.md"
+    fi
     t0=$(date +%s)
     AD_OWNER="$OWNER" codex exec --skip-git-repo-check --ephemeral -C "$work" \
       -s "$sandbox" -c sandbox_workspace_write.network_access=true --add-dir "$LEASES" \

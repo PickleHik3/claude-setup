@@ -69,8 +69,10 @@ $A -s emu lease release                          # when done; stops an emulator 
 ```
 
 Looking (`status`, `top`, `ui`, `find`, `shot`, `zoom`, `logcat`, getters) needs no lease;
-every command that can change the device refuses without one and names the holder. Each
-command extends your lease by 10 minutes. Subagents share their session's lease.
+every command that can change the device refuses without one and names the holder. Raw
+`adb` and `shell` always need one, reads included, because `ad` cannot tell `getprop` from
+`pm clear`: for a lease-free read use the look commands instead. Each command extends your
+lease by 10 minutes. Subagents share their session's lease.
 
 **Picking up again after a pause** (a resumed worker, or you after waiting on something): your
 lease may have lapsed. Ten idle minutes free it, the reaper stops a slot 15 minutes after that, and
@@ -129,10 +131,20 @@ read-only questions. Options pass through to `mobilerun run`:
 
 Expect about 20 s for a one-step read and a few minutes for an 8-step task.
 
-`$A -s X codex "goal"` hands the same kind of goal to the Codex CLI, which drives the device
-through `ad` (so the lease holds) and lists the commands it ran. On a Settings read it took
-47 s against mobilerun's 81 s. Both bill their own provider, not Claude: let them navigate
-and keep your own tokens for judging what they found.
+`$A -s X codex "goal" [--map FILE] [codex exec flags]` hands the same kind of goal to the Codex
+CLI, which drives the device through `ad` (so the lease holds) and lists the commands it ran.
+On a Settings read it took 47 s against mobilerun's 81 s (one sample each). Both bill their own
+provider, not Claude: let them navigate and keep your own tokens for judging what they found.
+
+- **Model:** `-m gpt-6.1-sol` or `-m gpt-6.1-terra` after the goal; with no `-m`, Codex's own
+  default applies. Reasoning effort is fixed at low; Codex runs ephemeral, with the `ad`
+  command set and the lease directory as its whole world.
+- **The app's map:** `--map docs/agents/device-map.md` appends the map to Codex's prompt, so it
+  follows routes and ids instead of tapping around. With no flag, `$AD_MAP` or
+  `./docs/agents/device-map.md` (when it exists) is used, so run it from the app's repository.
+- **Output:** the answer prints to stdout; the log, prompt and screenshots stay in the
+  `/tmp/ad-codex.*` directory named on stderr. `--json` makes the log JSONL with a
+  `turn.completed` usage record, which is how to count steps and tokens for a benchmark.
 Each mobilerun run selects its own keyboard, then `ime disable`s it at the end. That
 leaves Android on whatever keyboard comes next (voice typing on Pong), not the user's.
 `ad run` puts back both the selected keyboard and the enabled list, so launch mobilerun
@@ -144,7 +156,9 @@ bug reproductions and typing into a terminal.
 - `$A tap "Sign in"` matches text, desc or id, and prefers a clickable node.
   `$A tap 300 640` taps coordinates, and `$A long ...` long-presses.
 - `$A type "hello"` types ASCII only. For a terminal, send one word per call with
-  `$A key SPACE` between words, and `$A key ENTER` to run it.
+  `$A key SPACE` between words, and `$A key ENTER` to run it. On the emulator `input text`
+  drops a letter now and then ("Buy mik"), so read the field back with `ui` before `key ENTER`
+  and retype if it is wrong.
 - `$A swipe up|down|left|right`, `$A key ENTER TAB`, `$A back`, `$A home`.
 - `$A launch PKG` starts the app's launcher activity and prints the start time.
 
