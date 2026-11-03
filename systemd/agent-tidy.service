@@ -1,0 +1,7 @@
+[Unit]
+Description=Remove merged agent worktrees, their branches and old work logs
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/agent-tidy --apply
+Nice=10

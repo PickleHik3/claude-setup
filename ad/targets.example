@@ -1,0 +1,4 @@
+# ad named targets: NAME HOST:PORT. A HOST that is not an IP is resolved with `tailscale ip -4`.
+# The local emulator needs no entry (`ad -s emu`).
+pong    <tailscale-host-or-ip>:5555
+surface    <tailscale-host-or-ip>:5555

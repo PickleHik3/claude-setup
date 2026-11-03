@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: parallel-checks-two-emulators
+expected_outcome: |
+  Each subagent gets its own emulator slot with its own lease (via lease acquire --any or distinct emuN names), boots it with ad -s emuN emu start, and releases its lease at the end. No two subagents share one slot.
