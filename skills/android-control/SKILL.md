@@ -31,15 +31,15 @@ $A help                   # every subcommand
   | `pong` | the user's Nothing Phone 2: Android 16 (API 36), arm64, 1080x2412 at 420 dpi, Adreno GPU | phone sign-off; what the user actually sees |
   | `surface` | Surface Pro 7 on Bliss OS 18.8 (the user's experimental Android 15 build): x86_64, 2736x1824 at 320 dpi, Mesa GPU | tablet and landscape layouts; Android 15 behavior |
 
-- `emu`, `emu2`, `emu3`, `emu4`: the local Android 16 emulators (`emulator-5554`, `-5556`,
-  `-5558`, `-5560`), each a stock Pixel 7-like phone at 1080x2400 and 420 dpi with Google
-  APIs, the same Android version as Pong, running arm64 apps through translation (install
-  x86_64 builds where an app runs its own native binaries). 3 at once is the working limit;
-  start the 4th (`$A -s emu4 emu start --allow-4th`) only after asking the user. `emu` (AVD
-  `tl16`) keeps installs and settings between boots; `emu2`-`emu4` (AVD `tl16b`) are
-  read-only and reset when stopped. So use `emu` when an install must persist, a pool slot
-  for parallel or throwaway checks. For "any emulator" take `$A lease acquire --any
-  "purpose"` (a running slot first, pool slots before `emu`); parallel subagents each take their own slot. A
+- `emu`, `emu2`: the two local Android 16 emulators (`emulator-5554`, `-5556`), each a stock
+  Pixel 7-like phone at 1080x2400 and 420 dpi with Google APIs, the same Android version as
+  Pong, running arm64 apps through translation (install x86_64 builds where an app runs its
+  own native binaries). There are only these two; when both are leased, wait for one
+  (`--wait`) rather than creating or launching another emulator, since the host's disk and
+  memory are sized for two. `emu` (AVD `tl16`) keeps installs and settings between boots;
+  `emu2` (AVD `tl16b`) is read-only and resets when stopped. So use `emu` when an install
+  must persist, `emu2` for throwaway checks, and both for two checks in parallel. For "any emulator" take `$A lease acquire --any
+  "purpose"` (a running slot first, `emu2` before `emu`); two parallel subagents each take their own slot. A
   slot is reachable only while running: with its lease held, run `$A -s emuN emu start`
   (about 80 s, KVM-accelerated, rendered on the CPU; refused under 8 GiB of free memory;
   boots queue 20 s apart). Releasing the lease stops an emulator it started, and

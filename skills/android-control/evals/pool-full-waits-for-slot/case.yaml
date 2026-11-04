@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: pool-full-waits-for-slot
+expected_outcome: |
+  Both emulator slots (emu, emu2) are leased. The agent does not take over a leased slot or start an extra emulator; it waits for a free slot with lease acquire --any --wait, or tells the user both are busy and offers to wait.
