@@ -8,9 +8,9 @@ side, rough corners, text touching an icon. They come from four gaps:
 - **Shrunken screenshots.** A reader scales a 1080x2412 screenshot down to about 1568 px
   tall (0.65x), so a 1–2 px clip vanishes. `ad zoom` crops the element from the
   full-resolution screenshot and enlarges it, so every device pixel shows.
-- **The emulator isn't the user's screen.** It is close to Pong's size and density
+- **The emulator isn't the user's screen.** It is close to the phone's size and density
   (1080x2400, 420 dpi) but renders on the CPU. Blur, glass, anti-aliasing and rounded corners can
-  look different on Pong's Adreno GPU.
+  look different on the phone's Adreno GPU.
 - **The builder grading its own work.** A fresh reviewer that sees only the pixels is harsher.
 
 ## Steps
@@ -18,10 +18,10 @@ side, rough corners, text touching an icon. They come from four gaps:
 1. **List the surface.** From the diff, write down every element, screen and state the
    change touches: default, pressed or selected, disabled, empty, long text, error.
    Include the existing siblings it has to match.
-2. **Pick the device.** Iterate on `emu` (Android 16 like Pong, 420 dpi). It renders on
+2. **Pick the device.** Iterate on `emu` (Android 16 like the phone, 420 dpi). It renders on
    the CPU. Do the final look
-   on Pong for phones and on
-   `surface` (real Mesa GPU, 2736x1824) for tablet or landscape layouts. Run `ad -s X top`
+   on the phone for phones and on
+   `tablet` (a real GPU) for tablet or landscape layouts. Run `ad -s X top`
    first. Record or touch a real device only when the user asked for a device check, or
    the launcher or your app is in front.
 3. **Zoom every element.** `ad zoom "<text|desc|id>" out/name.png` (`--all` crops every
@@ -35,10 +35,10 @@ side, rough corners, text touching an icon. They come from four gaps:
    each one back to the value you recorded. Don't use `reset` or a guessed default:
    a device may carry a deliberate size, density or theme that `reset` would wipe.
 5. **Check motion.** If the change appears, expands, slides or transitions, run
-   `ad -s pong frames 3 out/anim -- tap "<trigger>"`. Read `sheet.png` for the
+   `ad -s phone frames 3 out/anim -- tap "<trigger>"`. Read `sheet.png` for the
    sequence, then crop the frames where edges move:
    `magick out/anim/f012.png -crop 400x200+80+60 +repage -filter point -resize 400% out/f012-zoom.png`.
-   Judge motion on Pong: the emulator renders on the CPU, so its timing isn't real.
+   Judge motion on the phone: the emulator renders on the CPU, so its timing isn't real.
 6. **Independent review.** This is part of "done", not optional. You built the change,
    so you see what you intended; a fresh agent sees what is there. Give the reviewer only:
    - the crop and full-screen paths, plus the folder's `zoom-index.tsv` (each crop's real

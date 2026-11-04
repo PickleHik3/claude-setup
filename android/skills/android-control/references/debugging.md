@@ -17,7 +17,6 @@ log covers exactly the steps you took. Extra logcat args pass through:
 | Files the app wrote | `ad shell run-as PKG ls files/` | Debuggable builds only. Use `ad adb pull` for `/sdcard` paths. |
 | Database | `ad shell run-as PKG cat databases/app.db > /tmp/app.db`, then `sqlite3` on the host | |
 | Raw UI XML | `ad shell uiautomator dump /sdcard/u.xml && ad adb exec-out cat /sdcard/u.xml` | When `ad ui` hides an attribute you need. |
-| What mobilerun did | the `mobilerun run` output, step by step | Add `--save-trajectory step` to keep each step's screen state. |
 | Debugger | Android Studio lists the same serial `ad serial` prints | Attach normally. |
 
 Arbitrary shell: `ad shell CMD` runs as the adb shell user. On `emu`, `ad -s emu adb root`

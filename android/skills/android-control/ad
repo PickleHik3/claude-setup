@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ad — drive Android devices: pick and connect a device, boot the emulator, look and act fast
-# over adb, set test conditions, read logs. `ad run "goal"` hands a goal to mobilerun.
+# over adb, set test conditions, read logs.
 # Target: `ad -s NAME|SERIAL|MODEL|emu|emu2 CMD`, else $ANDROID_SERIAL, else the only device.
 set -euo pipefail
 
@@ -292,14 +292,15 @@ a() { adb -s "$S" "$@"; }
 sh_() { adb -s "$S" shell "$@"; }
 
 # Install an APK on a Tailscale target through the private GitHub repo $DROP_REPO instead of
-# pushing it over adb: the relay to a phone can crawl (11-33 KB/s seen on pong), while both ends
+# pushing it over adb: the relay to a phone can crawl (11-33 KB/s seen on phone), while both ends
 # reach GitHub fast. Upload here → the device's Termux downloads it over its own connection (ssh
 # alias from the target's drop= field) → `pm install` reads it through run-as of the Termux app
 # (a debuggable/staging build), or from /sdcard when Termux has storage access. The asset and the
 # device copy are deleted afterwards. Needs `gh` logged in here and in that Termux.
-DROP_REPO="${AD_DROP_REPO:-PickleHik3/device-drops}"
+DROP_REPO="${AD_DROP_REPO:-}"   # a private GitHub repo you own, as OWNER/NAME; needed for drop= targets
 DROP_RELEASE="${AD_DROP_RELEASE:-inbox}"
 drop_install() {
+  [ -n "$DROP_REPO" ] || die "drop: set AD_DROP_REPO=OWNER/NAME (a private repo you own) or install with --direct"
   local apk="$1" alias="$2" pkg="${3:-com.termux}" size sha asset tmp home dir r out
   size="$(stat -c %s "$apk")"
   sha="$(sha256sum "$apk" | cut -c1-12)"
@@ -400,67 +401,12 @@ case "$cmd" in
         done ;;
       *)     die "usage: ad -s emu|emu2 emu start|stop   (ad emu reap: timer)" ;;
     esac ;;
-  serial)  echo "$S" ;;   # for mobilerun -d and ANDROID_SERIAL
+  serial)  echo "$S" ;;   # for ANDROID_SERIAL
   status)  echo "serial:  $S"
            echo "model:   $(sh_ getprop ro.product.manufacturer | tr -d '\r') $(sh_ getprop ro.product.model | tr -d '\r')"
            echo "android: $(sh_ getprop ro.build.version.release | tr -d '\r') (API $(sh_ getprop ro.build.version.sdk | tr -d '\r'), $(sh_ getprop ro.product.cpu.abi | tr -d '\r'))"
            sh_ wm size | tr -d '\r'; sh_ wm density | tr -d '\r'
-           sh_ dumpsys battery 2>/dev/null | grep -E '^ *level' | sed 's/^ */battery /' || true
-           sh_ pm path com.mobilerun.portal >/dev/null 2>&1 && echo "portal:  installed" || echo "portal:  missing (mobilerun setup -d $S)" ;;
-
-  # --- goals: codex ------------------------------------------------------------------
-  codex)   # ad codex "goal" [-m MODEL]   (Codex CLI drives the device through ad; same lease)
-           # AD_CODEX_SANDBOX=danger-full-access lifts the sandbox (ssh, paths outside the workdir).
-    case "${1:-}" in ""|-h|--help) die "usage: ad -s DEVICE codex \"goal\" [--map FILE] [codex exec flags, e.g. -m MODEL --json]" ;; esac
-    sandbox="${AD_CODEX_SANDBOX:-workspace-write}"
-    goal="$1"; shift
-    # The app's map (docs/agents/device-map.md) goes into the prompt so Codex follows it instead
-    # of exploring: --map FILE, else $AD_MAP, else ./docs/agents/device-map.md if it exists.
-    map="${AD_MAP:-}"; [ -z "$map" ] && [ -f docs/agents/device-map.md ] && map="$PWD/docs/agents/device-map.md"
-    if [ "${1:-}" = --map ]; then map="$2"; shift 2; fi
-    [ -z "$map" ] || [ -f "$map" ] || die "map not found: $map"
-    work="$(mktemp -d "${TMPDIR:-/tmp}/ad-codex.XXXXXX")"
-    cat > "$work/PROMPT.md" <<PROMPT
-You drive one Android device through the \`ad\` tool. Use only commands of this form:
-  $HERE/ad -s ${TARGET:-$S} <command>
-Commands: top, ui, find TEXT, tap TEXT|X Y, long, swipe up|down|left|right, type ASCII,
-key NAME, back, home, launch PKG, shot FILE, zoom TEXT FILE, logcat PKG, crash. Run no other
-programs and never install, uninstall, clear data or change settings unless the goal says so.
-Look ($HERE/ad -s ${TARGET:-$S} ui) before each tap; act in small steps.
-
-Goal: $goal
-
-Finish with: the end state you saw (from ui or top), each step you took as an ad command, and
-anything that looked wrong. Save any screenshots under $work.
-PROMPT
-    if [ -n "$map" ]; then
-      { printf '\n## The app'"'"'s map\nFollow it instead of exploring; its adb lines run as `%s/ad -s %s adb shell ...`.\n\n' "$HERE" "${TARGET:-$S}"
-        cat "$map"; } >> "$work/PROMPT.md"
-    fi
-    t0=$(date +%s)
-    AD_OWNER="$OWNER" codex exec --skip-git-repo-check --ephemeral -C "$work" \
-      -s "$sandbox" -c sandbox_workspace_write.network_access=true --add-dir "$LEASES" \
-      -c model_reasoning_effort=low -o "$work/answer.md" "$@" - < "$work/PROMPT.md" >"$work/log.txt" 2>&1 \
-      || { tail -20 "$work/log.txt" >&2; die "codex failed; full log: $work/log.txt"; }
-    cat "$work/answer.md"; echo "ad: codex took $(( $(date +%s) - t0 )) s; log and files in $work" >&2 ;;
-  # --- goals: mobilerun ---------------------------------------------------------------
-  run)     # ad run "goal" [mobilerun run flags]   (LLM agent; keyboard restored afterwards)
-    [ $# -ge 1 ] || die 'usage: ad run "goal" [--reasoning] [--vision] [--steps N]'
-    goal="$1"; shift
-    # mobilerun selects its own keyboard at the start and `ime disable`s it at the end, which
-    # leaves Android on whatever enabled IME comes next (voice typing on Pong). Put back both
-    # the selected keyboard and the enabled set.
-    ime="$(sh_ settings get secure default_input_method | tr -d '\r')"
-    enabled="$(sh_ ime list -s | tr -d '\r')"
-    rc=0; mobilerun run -d "$S" --no-stream "$@" "$goal" || rc=$?
-    for i in $enabled; do
-      sh_ ime list -s | tr -d '\r' | grep -qxF "$i" || sh_ ime enable "$i" >/dev/null
-    done
-    now="$(sh_ settings get secure default_input_method | tr -d '\r')"
-    if [ -n "$ime" ] && [ "$ime" != "null" ] && [ "$now" != "$ime" ]; then
-      sh_ ime set "$ime" >/dev/null && echo "ad: restored keyboard $ime (mobilerun left $now)" >&2
-    fi
-    exit "$rc" ;;
+           sh_ dumpsys battery 2>/dev/null | grep -E '^ *level' | sed 's/^ */battery /' || true ;;
 
   # --- acting (fast adb input; never changes the keyboard) ------------------------------
   tap)     xy="$(resolve_xy "$@")" || exit 1; read -r x y <<<"$xy"; sh_ input tap "$x" "$y" ;;
@@ -605,8 +551,8 @@ PROMPT
   logclear) a logcat -c ;;
   crash)   a logcat -d -b crash -v time | tail -80 ;;
 
-  runas)   # ad runas PKG "command"   (runs inside a debuggable app's own uid and data dir; prints output)
-    pkg="${1:?ad runas PKG \"command\"}"; shift
+  runas)   # ad -s DEVICE runas PKG "command"   (runs inside a debuggable app's own uid and data dir; prints output)
+    pkg="${1:?ad -s DEVICE runas PKG \"command\"}"; shift
     [ $# -gt 0 ] || die "usage: ad -s DEVICE runas PKG \"command\"   (set AD_RUNAS_PRELUDE for an env prefix)"
     printf '%s\n%s\n' "${AD_RUNAS_PRELUDE:-}" "$*" | a shell run-as "$pkg" sh -s ;;
 
