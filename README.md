@@ -3,8 +3,8 @@
 A pure Claude Code orchestration setup. The main session orchestrates and keeps its context small;
 `Explore` (Haiku) does the reading, `fixer` (Sonnet) builds by default, and `fixer-opus` (Opus)
 takes the named cases that need it. A PreToolUse hook enforces who may spawn what: subagents never
-run on the main session's model, and a worker may spawn only Explore. Everything installs into one
-`~/.claude`, with no sudo and nothing fetched from third parties. An optional Android module adds
+run on Fable (the main session's model), and a worker may spawn only Explore. Everything installs into one
+`~/.claude`, with no sudo; the one third-party piece is the mattpocock-skills plugin. An optional Android module adds
 device driving for apps.
 
 Start with [docs/orchestration.md](docs/orchestration.md).
