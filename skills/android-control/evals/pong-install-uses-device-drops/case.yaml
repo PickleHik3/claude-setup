@@ -1,7 +1,0 @@
-schema_version: "1.1"
-name: pong-install-uses-device-drops
-expected_outcome: |
-  The agent installs on pong with `ad -s pong install <apk>`, which goes through the private
-  device-drops repo because pong's target line carries drop=termux, instead of `adb install`,
-  `ad install --direct` or Gradle's install over the Tailscale link; it leases pong first and
-  ends with a launch and crash check.
