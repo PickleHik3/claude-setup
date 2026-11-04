@@ -10,9 +10,8 @@ Close out this session's own work. Touch nothing another session owns.
    - merged: remove the worktree and delete the branch;
    - finished but not merged: say so and ask whether to merge it now;
    - unfinished: commit it as WIP on its branch (never on a shared branch), keep it, and note it.
-2. **Background work.** Stop any Waydroid, logcat or monitor loop this session started. Stop
-   emulators by releasing every `ad` lease this session holds (`ad lease status` marks them
-   "(you)"); a release stops the emulator that lease started.
+2. **Background work.** Stop any background command, log capture, monitor loop or emulator this
+   session started. Release anything it leased or locked, and leave what another session started.
 3. **Unpushed commits.** List them per branch; push only if the user says so.
 4. **Memory.** Keep the project's "In flight" lines in `MEMORY.md` current: one line per open
    thread with its branch, and delete lines for work that has landed. Save durable facts and

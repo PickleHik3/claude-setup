@@ -4,6 +4,8 @@
 - The main session may spawn anything except Fable (model param, agent frontmatter, or a fork
   while the main session itself runs Fable). Fable is for the main session only, chosen by the user.
 - A subagent may spawn only the Explore agent (Haiku); nothing else, and no model override.
+- A Workflow is denied only when a model is actually set to Fable: a `model` option in its script,
+  or a `model` key anywhere in its input. Merely mentioning Fable in a prompt is allowed.
 """
 import json, os, re, sys
 
@@ -36,6 +38,26 @@ def main_model(transcript):
     return model.lower()
 
 
+def model_values(obj):
+    """Every string stored under a `model` key, at any depth."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == "model" and isinstance(v, str):
+                yield v
+            else:
+                yield from model_values(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from model_values(v)
+
+
+def workflow_uses_fable(ti):
+    script = ti.get("script")
+    if isinstance(script, str) and re.search(r"""model\s*[:=]\s*['"][^'"]*fable""", script, re.I):
+        return True
+    return any("fable" in v.lower() for v in model_values(ti))
+
+
 def deny(reason):
     json.dump({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
@@ -52,7 +74,7 @@ def main():
     if tool == "Workflow":
         if nested:
             return deny("Subagents do not run workflows; report back and let the main session decide.")
-        if re.search(r"fable|solver", json.dumps(ti), re.I):
+        if workflow_uses_fable(ti):
             return deny("Workflow agents never run on Fable; use opus, sonnet or haiku.")
         return
     if tool != "Agent":
