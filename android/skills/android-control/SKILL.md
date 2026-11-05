@@ -159,6 +159,19 @@ it), motion frames on the phone when it moves, and, when the user asks for a rev
 reviewer agent judging the crops without the code. The full steps and defect checklist are in
 [references/visual-review.md](references/visual-review.md).
 
+**Off-device first for static View layout.** If the project has Roborazzi on Robolectric
+(`@GraphicsMode(NATIVE)`), a static layout change to a plain View screen such as a settings
+page can be rendered in the worktree first. Add or update a capture there, run
+`record<Variant>Roborazzi`, and look at the PNG. It takes seconds, needs no device, and a
+builder can run it. Light, dark, width and pane variants come from qualifiers. A long page
+needs a taller qualifier. Pause the main looper and idle before you capture.
+
+It doesn't replace the device check. The renderer shows no status bar, insets, elevation or
+real device fonts. Recorded `RenderNode`s (live glass), AGSL `RuntimeShader`s and motion don't
+render at all. `RenderEffect` blur renders only with `robolectric.pixelCopyRenderMode=hardware`.
+Glass, effects, wallpaper, the IME, gestures and anything that moves still go to an emulator
+or the phone, and so does the final look of every change.
+
 ## 5. Apps, conditions, logs
 
 - **Install:** `$A install app.apk` keeps the app's data, like an update. `--fresh`
