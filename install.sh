@@ -28,6 +28,7 @@ link() { # <repo path> <target>
 # 1. Core links.
 link CLAUDE.md "$CLAUDE/CLAUDE.md"
 link agents/Explore.md "$CLAUDE/agents/Explore.md"
+link agents/lead.md "$CLAUDE/agents/lead.md"
 link hooks/model-gate.py "$CLAUDE/hooks/model-gate.py"
 link skills/wrap-up "$CLAUDE/skills/wrap-up"
 link bin/agent-tidy "$HOME/.local/bin/agent-tidy"
@@ -59,7 +60,8 @@ data = json.loads(text) if text.strip() else {}
 shutil.copyfile(path, path + ".bak")
 env = data.setdefault("env", {})
 env["CLAUDE_CODE_SUBAGENT_MODEL"] = "sonnet"
-env["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"] = "2"
+# main -> lead -> fixer -> Explore is three deep.
+env["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"] = "3"
 pre = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
 has = any("model-gate.py" in h.get("command", "")
           for entry in pre for h in entry.get("hooks", []))

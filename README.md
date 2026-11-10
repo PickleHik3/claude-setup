@@ -1,9 +1,11 @@
 # claude-setup
 
 A pure Claude Code orchestration setup. The main session orchestrates and keeps its context small;
-`Explore` (Haiku) does the reading, `fixer` (Sonnet) builds by default, and `fixer-opus` (Opus)
-takes the named cases that need it. A PreToolUse hook enforces who may spawn what: subagents never
-run on Fable (the main session's model), and a worker may spawn only Explore. Everything installs into one
+`Explore` (Haiku) does the reading, `fixer` (Sonnet) builds by default, `fixer-opus` (Opus)
+takes the named cases that need it, and `lead` (Opus) runs one wave of work through fixers and
+hands back a single report. A PreToolUse hook enforces who may spawn what: subagents never
+run on Fable (the main session's model), a worker may spawn only Explore, and a lead may also
+spawn `fixer` and `device-checker`. Everything installs into one
 `~/.claude`, with no sudo; the one third-party piece is the mattpocock-skills plugin. An optional Android module adds
 device driving for apps.
 
@@ -15,6 +17,7 @@ Start with [docs/orchestration.md](docs/orchestration.md).
 |---|---|
 | `CLAUDE.md` | Global instructions: delegation table, briefs, worktrees and merging |
 | `agents/Explore.md` | Read-only scout on Haiku |
+| `agents/lead.md` | Opus lead for one wave: decides, briefs fixers, checks them, reports once |
 | `agents/fixer.head.md`, `fixer-opus.head.md`, `fixer.body.md` | Parts of the two builder agents; the installer joins head and body into `fixer.md` and `fixer-opus.md` |
 | `hooks/model-gate.py` | PreToolUse gate on `Agent` and `Workflow` calls |
 | `docs/orchestration.md` | How the pieces fit together |
@@ -33,7 +36,7 @@ It is safe to re-run and touches only `~/.claude`, `~/.local/bin`, `~/.config/sy
 `~/.config/ad`. Files are symlinked into place; a real file already at a target is moved aside to
 `<name>.bak`. It also merges these into `~/.claude/settings.json` (the old file is kept as
 `settings.json.bak`, every other key is preserved): `CLAUDE_CODE_SUBAGENT_MODEL=sonnet`,
-`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2`, and the model-gate hook.
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=3` (main, lead, fixer, Explore), and the model-gate hook.
 
 `fixer.md` and `fixer-opus.md` are generated files, not links. Edit the parts under `agents/` in
 this repo and re-run `./install.sh`.

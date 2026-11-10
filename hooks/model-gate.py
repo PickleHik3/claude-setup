@@ -4,12 +4,16 @@
 - The main session may spawn anything except Fable (model param, agent frontmatter, or a fork
   while the main session itself runs Fable). Fable is for the main session only, chosen by the user.
 - A subagent may spawn only the Explore agent (Haiku); nothing else, and no model override.
+- The one exception is the `lead` agent (Opus): it may also spawn `fixer` and `device-checker`,
+  with no model override, so it can run one wave of work and hand back a single report. A lead
+  never spawns another lead or `fixer-opus`.
 - A Workflow is denied only when a model is actually set to Fable: a `model` option in its script,
   or a `model` key anywhere in its input. Merely mentioning Fable in a prompt is allowed.
 """
 import json, os, re, sys
 
 NESTED_OK = {"Explore"}
+LEAD_OK = {"Explore", "fixer", "device-checker"}
 
 
 def frontmatter_model(name, cwd):
@@ -86,6 +90,11 @@ def main():
     if nested:
         if st in NESTED_OK and model in ("", "haiku"):
             return
+        if d.get("agent_type") == "lead":
+            if st in LEAD_OK and not model:
+                return
+            return deny("A lead may spawn only fixer, Explore and device-checker, with no model "
+                        "override. Do the rest yourself or return it under 'Decisions needed'.")
         return deny("A subagent may spawn only the Explore agent (Haiku) for reading, with no model "
                     "override. Do the work yourself or report what you need to the main session.")
 

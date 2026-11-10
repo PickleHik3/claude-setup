@@ -9,11 +9,24 @@ still gets the work right. Delegate when a worker saves more reading than its st
 | Explore | Haiku | Read-only search and reading; returns the conclusion with `path:line`. |
 | fixer | Sonnet | The default builder: any specified change at any size, including geometry or layout with a checkable spec. |
 | fixer-opus | Opus | Only when the premise may be wrong, a fixer round already missed once, a renderer or pipeline is being replaced, or the spec should be challenged before building. |
+| lead | Opus | One bounded wave of multi-step work that needs judgement at a few points and typing in between. It fixes the list, briefs fixers one at a time, checks them and hands back one report with raw evidence. |
 
 - Investigation (unknown cause) goes to Explore or a reproduction first, never to a builder with
   the investigation in the brief.
 - Subagents never run on Fable; Fable is the main session's model, chosen by the user. Workers may
-  spawn only Explore; Explore spawns nothing. `hooks/model-gate.py` enforces both.
+  spawn only Explore; Explore spawns nothing. The exception is `lead`, which may also spawn
+  `fixer` and `device-checker`, never `lead` or `fixer-opus`. `hooks/model-gate.py` enforces all
+  of it.
+- Opus is for judgement, not typing. Once the premise is settled and the change list is fixed
+  (a verbatim move, a substitution, a scripted pass), the builder is `fixer`, however large the
+  change; the guard is a mechanical check of the result, which works the same for any model.
+- Use `lead` when the main session would otherwise read every worker's report for one wave:
+  most of all when the main session runs on Fable, where each report costs the most. When the
+  main session runs on Opus it can lead a wave itself, so `lead` earns its place only for a long
+  wave, or two waves running side by side. One lead per wave; the main session keeps the user's
+  decisions, merges into shared checkouts, real devices, memory and the ledger.
+- A worker's full report goes to a file; what comes back into the main context is short (the
+  outcome, the raw result lines, what was not verified, the file's path).
 - Effort stays at the agent's default; for one hard task pass `effort: high` on the Agent call
   (text in a brief does not change effort).
 - Reuse a worker per area of code (SendMessage keeps what it has read); retire it when it compacts

@@ -42,10 +42,11 @@ flowchart LR
 
 | Agent | Model | Effort | Does |
 |---|---|---|---|
-| main session | Fable (the user's choice) | default | Plans, briefs, reviews, merges. |
+| main session | Fable or Opus (the user's choice) | default | Plans, briefs, reviews, merges. |
 | Explore | Haiku | default | Read-only search; returns conclusions, spawns nothing. |
 | `fixer` | Sonnet | medium | Default builder in its own worktree. |
 | `fixer-opus` | Opus | medium | The same worker for the named cases below. |
+| `lead` | Opus | medium | Runs one wave: decides, briefs fixers one at a time, checks them, reports once with raw evidence. Most useful under a Fable main session; an Opus main session can lead a wave itself. |
 
 Effort stays at each agent's default. For one hard task the main session passes `effort: high` on
 the Agent call; text inside a brief does not change effort.
@@ -98,6 +99,10 @@ longer write-up for 152k tokens against 131k).
   session; a subagent, workflow agent or fork must not silently inherit it.
 - A subagent may spawn only Explore, on Haiku, with no model override. Workers do not fan out;
   the main session decides what happens next.
+- The one exception is `lead`: it may also spawn `fixer` and `device-checker`, with no model
+  override, and never another `lead` or `fixer-opus`. The hook tells a lead by the `agent_type`
+  field of its input. The chain main, lead, fixer, Explore is three deep, which is why the
+  installer sets `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=3`.
 - A Workflow is denied only when a model is actually set to Fable in its script or input.
 
 The point is cost and predictability: nested agents multiply usage invisibly, and the main
