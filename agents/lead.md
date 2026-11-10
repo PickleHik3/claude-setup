@@ -59,5 +59,6 @@ Hand-back, under 350 words
    failures), the summary line of each mechanical check, the device check's verdict line
 4. Decisions needed, or "none"
 5. Not verified: every check you did not run and every claim you could not confirm
-6. Workers: one line each (agent, task, pass / pass with review / fail, what it missed)
+6. Workers: one line each (agent, task, pass / pass with review / fail, what it missed, and its
+   tokens and tool uses as its completion notice gave them)
 7. Full report: the file's absolute path
