@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Install the Claude orchestration setup into ~/.claude (safe to re-run).
+# Install the Claude orchestration setup into the Claude config directory (safe to re-run).
 #   ./install.sh [--android]
-# Touches only ~/.claude, ~/.local/bin, ~/.config/systemd/user and ~/.config/ad.
+# The config directory is $CLAUDE_CONFIG_DIR when set, else ~/.claude. Run it once per profile:
+#   CLAUDE_CONFIG_DIR=~/.claude_work ./install.sh
+# Touches only that directory, ~/.local/bin, ~/.config/systemd/user and ~/.config/ad.
 # Existing real files are moved aside to <name>.bak before a link replaces them.
 # CLAUDE_SETUP_NO_SYSTEM=1 skips the plugin install and systemctl (for testing).
 set -euo pipefail
@@ -10,13 +12,14 @@ ANDROID=0
 for a in "$@"; do
   case "$a" in
     --android) ANDROID=1 ;;
-    -h|--help) sed -n '2,6p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
     *) echo "unknown option: $a (usage: ./install.sh [--android])" >&2; exit 2 ;;
   esac
 done
 
 R="$(cd "$(dirname "$0")" && pwd)"
-CLAUDE="$HOME/.claude"
+CLAUDE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+CLAUDE="${CLAUDE%/}"
 UNITS="$HOME/.config/systemd/user"
 
 link() { # <repo path> <target>
@@ -31,6 +34,7 @@ link agents/Explore.md "$CLAUDE/agents/Explore.md"
 link agents/lead.md "$CLAUDE/agents/lead.md"
 link hooks/model-gate.py "$CLAUDE/hooks/model-gate.py"
 link skills/wrap-up "$CLAUDE/skills/wrap-up"
+link skills/delegating "$CLAUDE/skills/delegating"
 link bin/agent-tidy "$HOME/.local/bin/agent-tidy"
 link systemd/agent-tidy.service "$UNITS/agent-tidy.service"
 link systemd/agent-tidy.timer "$UNITS/agent-tidy.timer"
@@ -51,9 +55,9 @@ echo "note: fixer.md and fixer-opus.md are generated. Edit the agents/fixer*.md 
 # 3. Merge the settings this setup needs, keeping every other key.
 SETTINGS="$CLAUDE/settings.json"
 [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
-python3 - "$SETTINGS" <<'PY'
+python3 - "$SETTINGS" "$CLAUDE" <<'PY'
 import json, shutil, sys
-path = sys.argv[1]
+path, config_dir = sys.argv[1], sys.argv[2]
 with open(path) as f:
     text = f.read()
 data = json.loads(text) if text.strip() else {}
@@ -63,13 +67,18 @@ env["CLAUDE_CODE_SUBAGENT_MODEL"] = "sonnet"
 # main -> lead -> fixer -> Explore is three deep.
 env["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"] = "3"
 pre = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
-has = any("model-gate.py" in h.get("command", "")
-          for entry in pre for h in entry.get("hooks", []))
-if not has:
-    pre.append({"matcher": "^(Agent|Workflow)$",
-                "hooks": [{"type": "command",
-                           "command": 'python3 "$HOME/.claude/hooks/model-gate.py"',
-                           "timeout": 10}]})
+gates = [h for entry in pre for h in entry.get("hooks", [])
+         if "model-gate.py" in h.get("command", "")]
+if not gates:
+    # The path is written out, so the hook runs the same whichever profile starts the session.
+    gate = {"type": "command",
+            "command": 'python3 "%s/hooks/model-gate.py"' % config_dir,
+            "timeout": 10}
+    pre.append({"matcher": "^(Agent|Workflow)$", "hooks": [gate]})
+    gates = [gate]
+for gate in gates:
+    # A gate that crashes or times out blocks the call instead of letting it through.
+    gate["onFailure"] = "block"
 with open(path, "w") as f:
     json.dump(data, f, indent=2)
     f.write("\n")

@@ -16,11 +16,12 @@ Start with [docs/orchestration.md](docs/orchestration.md).
 | Path | What it is |
 |---|---|
 | `CLAUDE.md` | Global instructions: delegation table, briefs, worktrees and merging |
-| `agents/Explore.md` | Read-only scout on Haiku |
+| `agents/Explore.md` | Read-only scout on Haiku, at medium effort |
 | `agents/lead.md` | Opus lead for one wave: decides, briefs fixers, checks them, reports once |
 | `agents/fixer.head.md`, `fixer-opus.head.md`, `fixer.body.md` | Parts of the two builder agents; the installer joins head and body into `fixer.md` and `fixer-opus.md` |
 | `hooks/model-gate.py` | PreToolUse gate on `Agent` and `Workflow` calls |
 | `docs/orchestration.md` | How the pieces fit together |
+| `skills/delegating/` | Loaded before a brief or a merge: the parts of a brief, worktree rules, the merge review |
 | `skills/wrap-up/` | `/wrap-up`: land or park a session's branches and remove its worktrees |
 | `bin/agent-tidy`, `systemd/agent-tidy.*` | Daily cleanup of merged agent worktrees (dry run unless `--apply`; timer off by default) |
 | `android/` | Optional module, see below |
@@ -32,11 +33,13 @@ Start with [docs/orchestration.md](docs/orchestration.md).
 ./install.sh --android   # core plus the Android module
 ```
 
-It is safe to re-run and touches only `~/.claude`, `~/.local/bin`, `~/.config/systemd/user` and
-`~/.config/ad`. Files are symlinked into place; a real file already at a target is moved aside to
+It installs into `$CLAUDE_CONFIG_DIR` when that is set and into `~/.claude` otherwise; for
+several profiles, run it once per profile, or link each profile's `agents`, `skills`, `rules` and
+`CLAUDE.md` to one of them and merge the settings below by hand. It is safe to re-run and touches
+only the config directory, `~/.local/bin`, `~/.config/systemd/user` and `~/.config/ad`. Files are symlinked into place; a real file already at a target is moved aside to
 `<name>.bak`. It also merges these into `~/.claude/settings.json` (the old file is kept as
 `settings.json.bak`, every other key is preserved): `CLAUDE_CODE_SUBAGENT_MODEL=sonnet`,
-`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=3` (main, lead, fixer, Explore), and the model-gate hook.
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=3` (main, lead, fixer, Explore), and the model-gate hook with `onFailure: block`.
 
 `fixer.md` and `fixer-opus.md` are generated files, not links. Edit the parts under `agents/` in
 this repo and re-run `./install.sh`.
@@ -75,3 +78,17 @@ present. Edit `~/.config/ad/targets` (copied from `android/targets.example`) to 
 - Per-account settings beyond the merged keys, and credentials.
 - Memory and transcripts.
 - The private model-performance ledger.
+
+## What is policy and what is Claude Code
+
+Claude Code allows a subagent on any model and lets subagents spawn subagents up to the spawn
+depth. "Subagents never run on Fable", "a worker spawns only Explore" and "a lead spawns only
+fixer, Explore and device-checker" are this setup's rules, enforced by `hooks/model-gate.py`, which
+fails closed. The model tiers (Haiku reads, Sonnet builds, Opus judges) are a choice, not an
+Anthropic recommendation.
+
+Checked on Claude Code 2.1.322. The setup uses `onFailure` on a hook, `maxTurns` and `effort` in
+agent files, path-scoped rules, the `agent_type` field of hook input and the Agent tool's
+`effort` input; the hooks page gives 2.1.295 as the first version with `onFailure`. Two things it
+relies on are not in the docs: the Agent tool's `effort` input (present in the tool's schema) and
+the shape of the transcript lines the gate reads the main session's model from.

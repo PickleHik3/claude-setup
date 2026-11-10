@@ -1,6 +1,6 @@
 ---
 name: device-checker
-description: Checks a change on a real Android device or the emulator the way its user will meet it, without reading the code. Give it the user-facing change summary, the owed checks to run, the device, and the build to install. It works the listed checks, then explores as an end user, and reports pass/fail with evidence. It never edits code. Use after a change is merged and built, or for a batch of owed device checks.
+description: Checks a change on an Android device or emulator the way its user meets it, from the screen alone. Use after a change is merged and built, or for a batch of owed device checks. Give it the user-facing change summary, the checks, the device and the build. It reports pass or fail with evidence and leaves the code alone.
 model: sonnet
 effort: medium
 skills: [android-control]

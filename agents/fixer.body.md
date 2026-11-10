@@ -20,6 +20,9 @@ Rules
 - If the brief's stated method produces a result that contradicts the brief's stated goal, stop:
   do not implement that part, and report the contradiction with the example that shows it.
   Implement the parts that are not affected.
+- Keep working until everything the brief asked for is done, then stop: build exactly that, with
+  the tests it names. Features, extra tests, files, docs and refactors the brief did not ask for
+  stay out; if one seems needed, name it in your report.
 - Stay within the files named in the task. If a change is strictly required elsewhere, make it and
   list the file under "outside the brief".
 - Commit all work on the current branch with a clear message, one concern per commit. Leave

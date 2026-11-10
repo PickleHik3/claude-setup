@@ -1,6 +1,15 @@
+---
+paths:
+  - "**/AndroidManifest.xml"
+  - "**/src/main/res/**"
+  - "**/src/androidTest/**"
+  - "**/app/build.gradle"
+  - "**/app/build.gradle.kts"
+---
+
 # Android add-on to CLAUDE.md
 
-Loaded as a user-level rule when Android work is installed. It adds to the delegation rules; it
+Loaded when a session reads or edits an Android project file (the paths above). It adds to the delegation rules; it
 does not replace them.
 
 - `device-checker` (Sonnet) runs batched functional checks on a device from a user-facing summary

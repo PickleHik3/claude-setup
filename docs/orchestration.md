@@ -43,7 +43,7 @@ flowchart LR
 | Agent | Model | Effort | Does |
 |---|---|---|---|
 | main session | Fable or Opus (the user's choice) | default | Plans, briefs, reviews, merges. |
-| Explore | Haiku | default | Read-only search; returns conclusions, spawns nothing. |
+| Explore | Haiku | medium | Read-only search; returns conclusions, spawns nothing. |
 | `fixer` | Sonnet | medium | Default builder in its own worktree. |
 | `fixer-opus` | Opus | medium | The same worker for the named cases below. |
 | `lead` | Opus | medium | Runs one wave: decides, briefs fixers one at a time, checks them, reports once with raw evidence. Most useful under a Fable main session; an Opus main session can lead a wave itself. |
@@ -103,7 +103,11 @@ longer write-up for 152k tokens against 131k).
   override, and never another `lead` or `fixer-opus`. The hook tells a lead by the `agent_type`
   field of its input. The chain main, lead, fixer, Explore is three deep, which is why the
   installer sets `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=3`.
-- A Workflow is denied only when a model is actually set to Fable in its script or input.
+- A Workflow is denied when a model is set to Fable in its script or input. From a session on
+  Fable (or one whose model the gate cannot read) it is also denied unless every `agent(` call
+  in the script names a model, because an agent with no model runs on the session's model.
+- The gate fails closed: an error inside it denies the call, and the hook entry carries
+  `onFailure: block` so a crash or a timeout blocks too.
 
 The point is cost and predictability: nested agents multiply usage invisibly, and the main
 session is the only place where the routing decision has the full picture.

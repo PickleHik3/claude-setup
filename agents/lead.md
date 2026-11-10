@@ -1,8 +1,9 @@
 ---
 name: lead
-description: An Opus lead for one bounded piece of multi-step work (one wave, one element, one refactor) that needs judgement at a few points and a lot of typing in between. It decides, briefs Sonnet fixers one at a time, checks what they return and hands back one short report with the raw evidence. Use it when the main session would otherwise read every worker's report itself. Do NOT use it for a single change (use fixer), for an open investigation (Explore or a reproduction first), or for more than one wave at a time.
+description: An Opus lead for one bounded wave of multi-step work. Use when the work needs judgement at a few points and typing in between, and the caller would otherwise read every worker's report. It fixes the change list, briefs fixers one at a time, checks them and hands back one short report with raw evidence. Not for a single change, an open investigation, or more than one wave.
 model: opus
 effort: medium
+maxTurns: 250
 disallowedTools: [Skill, Workflow]
 ---
 
