@@ -312,9 +312,12 @@ drop_install() {
   home="/data/data/$pkg/files/home"
   # Where the device keeps it: Termux's home (read back through run-as) or shared storage.
   if sh_ "run-as $pkg true" >/dev/null 2>&1; then dir="$home/drops"; else dir="/sdcard/Download/device-drops"; fi
+  # The ssh login shell may be fish (or any shell) with no Termux PATH: start bash through the
+  # system sh, found next to $SHELL in Termux's prefix, with PATH, HOME and TMPDIR set.
+  local rbash='/system/bin/sh -c '"'"'d=${SHELL%/*}; [ -x "$d/bash" ] || d=/data/data/com.termux/files/usr/bin; export PREFIX=${d%/bin}; export PATH=$d:$PATH TMPDIR=$PREFIX/tmp HOME=${HOME:-${PREFIX%/usr}/home}; exec "$d/bash" -s'"'"''
   out=""
   for r in 1 2; do   # a phone that just changed network fails its first GitHub call: retry once
-    out="$(ssh -o ConnectTimeout=20 "$alias" bash -s <<EOS 2>&1
+    out="$(ssh -o ConnectTimeout=20 "$alias" "$rbash" <<EOS 2>&1
 set -e
 mkdir -p '$dir' && cd '$dir'
 timeout 600 gh release download '$DROP_RELEASE' --repo '$DROP_REPO' -p '$asset' --clobber
@@ -333,7 +336,7 @@ EOS
   else
     out="$(sh_ "cat '$dir/$asset' | pm install -r -S $size" 2>&1 | tr -d '\r')"
   fi
-  ssh -o ConnectTimeout=20 "$alias" "rm -f '$dir/$asset'" >/dev/null 2>&1 || true
+  ssh -o ConnectTimeout=20 "$alias" "$rbash" <<<"rm -f '$dir/$asset'" >/dev/null 2>&1 || true
   gh release delete-asset "$DROP_RELEASE" "$asset" --repo "$DROP_REPO" -y >/dev/null 2>&1 || true
   echo "$out"
   grep -q '^Success' <<<"$out" || die "drop: pm install did not succeed"
