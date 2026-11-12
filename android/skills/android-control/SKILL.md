@@ -185,7 +185,8 @@ or the phone, and so does the final look of every change.
   target whose line in `~/.config/ad/targets` carries `drop=SSH_ALIAS` (for example `drop=termux`),
   `$A -s NAME install app.apk`:
   1. uploads the APK to the private GitHub repo named by `AD_DROP_REPO` (`OWNER/NAME`, release `inbox`);
-  2. has the device's Termux download it over ssh, at its own connection's speed;
+  2. has the device's Termux `curl` it over ssh, at its own connection's speed, from a short-lived
+     signed link resolved on the host (`gh release download` on a phone ran 4–8x slower);
   3. runs `pm install` on it, read back through `run-as com.termux` (a staging or debug build
      of the Termux app) or from `/sdcard` when Termux has storage access;
   4. deletes the asset and the device's copy.
@@ -193,8 +194,8 @@ or the phone, and so does the final look of every change.
   It prints `Success` like `adb install`; then do the usual launch and crash check. Emulators,
   and targets without a `drop=` field, install over adb as before. `--direct` forces adb for
   one install, and is also how you `--fresh` the Termux app itself (the drop route runs
-  through it). When the drop route fails, `ad` says why. The usual causes are no `gh` login in
-  Termux, its ssh server down (start it with `$A -s NAME runas com.termux /data/data/com.termux/files/usr/bin/sshd` on a staging
+  through it). When the drop route fails, `ad` says why. The usual causes are no `gh` login on
+  the host, Termux's ssh server down (start it with `$A -s NAME runas com.termux /data/data/com.termux/files/usr/bin/sshd` on a staging
   build), or a release build with neither run-as nor storage access. Use the same repo by hand
   for any other large file in either direction. Assets are private and deleted after use;
   GitHub documents no bandwidth cap on release assets (files up to 2 GiB).

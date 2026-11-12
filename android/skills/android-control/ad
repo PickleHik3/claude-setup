@@ -296,12 +296,14 @@ sh_() { adb -s "$S" shell "$@"; }
 # reach GitHub fast. Upload here → the device's Termux downloads it over its own connection (ssh
 # alias from the target's drop= field) → `pm install` reads it through run-as of the Termux app
 # (a debuggable/staging build), or from /sdcard when Termux has storage access. The asset and the
-# device copy are deleted afterwards. Needs `gh` logged in here and in that Termux.
+# device copy are deleted afterwards. Needs `gh` logged in here; the device needs only curl: it
+# fetches a short-lived signed link resolved here, because `gh release download` on a phone ran
+# 4-8x slower than curl of the same link (0.55-1.1 vs 4-5 MB/s on pong, 2026-11-12).
 DROP_REPO="${AD_DROP_REPO:-}"   # a private GitHub repo you own, as OWNER/NAME; needed for drop= targets
 DROP_RELEASE="${AD_DROP_RELEASE:-inbox}"
 drop_install() {
   [ -n "$DROP_REPO" ] || die "drop: set AD_DROP_REPO=OWNER/NAME (a private repo you own) or install with --direct"
-  local apk="$1" alias="$2" pkg="${3:-com.termux}" size sha asset tmp home dir r out
+  local apk="$1" alias="$2" pkg="${3:-com.termux}" size sha asset tmp home dir r out id url t0
   size="$(stat -c %s "$apk")"
   sha="$(sha256sum "$apk" | cut -c1-12)"
   asset="${TARGET}-${sha}-$(basename "$apk" | tr -c 'A-Za-z0-9._\n-' '_')"
@@ -309,6 +311,8 @@ drop_install() {
   echo "ad: drop: uploading $(basename "$apk") ($((size / 1048576)) MB) to $DROP_REPO@$DROP_RELEASE as $asset" >&2
   gh release upload "$DROP_RELEASE" "$tmp/$asset" --repo "$DROP_REPO" --clobber >/dev/null || { rm -rf "$tmp"; die "drop: upload to $DROP_REPO failed (gh auth status?)"; }
   rm -rf "$tmp"
+  id="$(gh api "repos/$DROP_REPO/releases/tags/$DROP_RELEASE" --jq ".assets[] | select(.name == \"$asset\") | .id")"
+  [ -n "$id" ] || die "drop: uploaded $asset but cannot find it in $DROP_REPO@$DROP_RELEASE"
   home="/data/data/$pkg/files/home"
   # Where the device keeps it: Termux's home (read back through run-as) or shared storage.
   if sh_ "run-as $pkg true" >/dev/null 2>&1; then dir="$home/drops"; else dir="/sdcard/Download/device-drops"; fi
@@ -316,11 +320,16 @@ drop_install() {
   # system sh, found next to $SHELL in Termux's prefix, with PATH, HOME and TMPDIR set.
   local rbash='/system/bin/sh -c '"'"'d=${SHELL%/*}; [ -x "$d/bash" ] || d=/data/data/com.termux/files/usr/bin; export PREFIX=${d%/bin}; export PATH=$d:$PATH TMPDIR=$PREFIX/tmp HOME=${HOME:-${PREFIX%/usr}/home}; exec "$d/bash" -s'"'"''
   out=""
+  t0=$SECONDS
   for r in 1 2; do   # a phone that just changed network fails its first GitHub call: retry once
+    # The signed link (valid a few minutes) is resolved per attempt; the token never leaves here.
+    url="$(curl -sS -o /dev/null -w '%{redirect_url}' -H "Authorization: Bearer $(gh auth token)" \
+      -H 'Accept: application/octet-stream' "https://api.github.com/repos/$DROP_REPO/releases/assets/$id")"
+    [ -n "$url" ] || { out="could not resolve a download link for asset $id"; continue; }
     out="$(ssh -o ConnectTimeout=20 "$alias" "$rbash" <<EOS 2>&1
 set -e
 mkdir -p '$dir' && cd '$dir'
-timeout 600 gh release download '$DROP_RELEASE' --repo '$DROP_REPO' -p '$asset' --clobber
+curl -fsS --max-time 600 -o '$asset' '$url'
 [ "\$(stat -c %s '$asset')" = '$size' ] && echo DROP_OK
 EOS
 )" && grep -q DROP_OK <<<"$out" && break
@@ -330,7 +339,7 @@ EOS
     gh release delete-asset "$DROP_RELEASE" "$asset" --repo "$DROP_REPO" -y >/dev/null 2>&1 || true
     die "drop: the device could not fetch $asset over ssh '$alias':\n$out\nIf Termux has no run-as (release build) and no storage access, install over adb: ad install APK --direct"
   fi
-  echo "ad: drop: on the device, installing" >&2
+  echo "ad: drop: device download took $((SECONDS - t0)) s; installing" >&2
   if [ "$dir" = "$home/drops" ]; then
     out="$(sh_ "run-as $pkg cat '$dir/$asset' | pm install -r -S $size" 2>&1 | tr -d '\r')"
   else
