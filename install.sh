@@ -79,6 +79,10 @@ if not gates:
 for gate in gates:
     # A gate that crashes or times out blocks the call instead of letting it through.
     gate["onFailure"] = "block"
+# diagnosing-bugs (mattpocock-skills) matches every bug report and refuses to fix without a
+# scripted reproduction; keep it for "diagnose" by hand. An existing choice is kept.
+data.setdefault("skillOverrides", {}).setdefault(
+    "mattpocock-skills:diagnosing-bugs", "user-invocable-only")
 with open(path, "w") as f:
     json.dump(data, f, indent=2)
     f.write("\n")

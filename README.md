@@ -39,7 +39,10 @@ several profiles, run it once per profile, or link each profile's `agents`, `ski
 only the config directory, `~/.local/bin`, `~/.config/systemd/user` and `~/.config/ad`. Files are symlinked into place; a real file already at a target is moved aside to
 `<name>.bak`. It also merges these into `~/.claude/settings.json` (the old file is kept as
 `settings.json.bak`, every other key is preserved): `CLAUDE_CODE_SUBAGENT_MODEL=sonnet`,
-`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=3` (main, lead, fixer, Explore), and the model-gate hook with `onFailure: block`.
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=3` (main, lead, fixer, Explore), the model-gate hook with `onFailure: block`,
+and `skillOverrides` setting `mattpocock-skills:diagnosing-bugs` to `user-invocable-only` (its
+description matches every bug report and it stops for a scripted reproduction; `/diagnosing-bugs`
+still runs it).
 
 `fixer.md` and `fixer-opus.md` are generated files, not links. Edit the parts under `agents/` in
 this repo and re-run `./install.sh`.

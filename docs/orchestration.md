@@ -55,7 +55,9 @@ the Agent call; text inside a brief does not change effort.
 
 `fixer` is the default for any specified change, at any size. `fixer-opus` is reserved for four
 named cases. Investigation with an unknown cause is neither: it goes to Explore or to a
-reproduction first, and the builder gets the cause in its brief.
+reproduction first, and the builder gets the cause in its brief. A cause is unknown only when
+nothing in the code fits what the user described: their description is the reproduction, and a
+likely cause that fits it goes straight to `fixer`.
 
 | Task | Goes to | Evidence (anonymised) |
 |---|---|---|
