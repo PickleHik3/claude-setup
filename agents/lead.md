@@ -49,6 +49,9 @@ Rules
 - Write the full story to a file: `<scratchpad or the path the caller gave>/lead-report-<branch>.md`,
   with each fixer's report, your checks' raw output and anything odd. Your hand-back is short and
   points at it.
+- After checking each fixer, record it: `cc-usage outcome <fixer-id> pass|review|fail --kind <kind>`
+  (`--missed` on a fail, `--retry-of <first id>` when you re-brief after a miss). The caller
+  records you.
 - Budget: you are expected to make few tool calls yourself. At 80 of your own tool calls write a
   progress note into the report file; at 150 stop and report what is done, committed and left.
 

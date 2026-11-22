@@ -36,6 +36,8 @@ link hooks/model-gate.py "$CLAUDE/hooks/model-gate.py"
 link skills/wrap-up "$CLAUDE/skills/wrap-up"
 link skills/delegating "$CLAUDE/skills/delegating"
 link bin/agent-tidy "$HOME/.local/bin/agent-tidy"
+link bin/cc-usage "$HOME/.local/bin/cc-usage"
+link hooks/usage-collect.py "$CLAUDE/hooks/usage-collect.py"
 link systemd/agent-tidy.service "$UNITS/agent-tidy.service"
 link systemd/agent-tidy.timer "$UNITS/agent-tidy.timer"
 
@@ -88,6 +90,14 @@ with open(path, "w") as f:
     f.write("\n")
 PY
 echo "merged settings into $SETTINGS (previous copy: $SETTINGS.bak)"
+
+# OPT-IN, NOT ENABLED: collect usage automatically (docs/usage-tracking.md). To enable, merge this
+# into settings.json by hand, or move it into the python block above after review. The hook always
+# exits 0, so it cannot block a session. Without it, run `cc-usage collect` before `cc-usage report`.
+#   "hooks": {
+#     "SessionEnd":   [{"hooks": [{"type": "command", "command": "python3 \"<config dir>/hooks/usage-collect.py\"", "timeout": 120}]}],
+#     "SubagentStop": [{"hooks": [{"type": "command", "command": "python3 \"<config dir>/hooks/usage-collect.py\"", "timeout": 120}]}]
+#   }
 
 # Android module.
 if [ "$ANDROID" = 1 ]; then

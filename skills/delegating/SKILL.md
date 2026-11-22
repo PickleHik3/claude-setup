@@ -42,3 +42,11 @@ commit) · constraints · what is known, including the cause for a fix · verify
    only the failures. Then remove the worktree and branch (`/wrap-up` does this at session end).
 - Stay on the branch a shared main checkout is on, and address other worktrees with `git -C
   <path>` in background chains.
+
+# Recording the outcome
+
+After checking a worker, run `cc-usage outcome <agent-id> pass|review|fail --kind <kind>` (review
+= passed after you fixed something). Give `--missed` when it failed, and `--retry-of <first id>`
+on a re-brief, so a retry's cost counts toward its task. Use `--pair` to tie two workers given the
+same task to compare models. The agent id is in the worker's completion notice; a unique prefix
+works. Written comparisons still go in the markdown ledger.

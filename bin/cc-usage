@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""cc-usage: usage and outcome tracker for Claude Code agents. See docs/usage-tracking.md."""
+import os, sys
+
+# Linked into ~/.local/bin by install.sh: follow the link back to the repo's usage/ folder.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "usage"))
+from cc_usage import main  # noqa: E402
+
+sys.exit(main())

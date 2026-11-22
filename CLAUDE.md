@@ -33,9 +33,11 @@ still gets the work right. Delegate when a worker saves more reading than its st
   (the Agent tool takes `effort`; text in a brief does not change effort).
 - Reuse a worker per area of code (SendMessage keeps what it has read); retire it when it compacts
   or the area changes.
-- Log each worker outcome in a private ledger: the file at `$CLAUDE_LEDGER` if set, else
-  `~/.claude/model-performance.md` (date, agent, effort, task kind, pass / pass with review /
-  fail, what it missed, tokens and calls). Route by what the ledger shows, not by habit.
+- Record each worker's outcome with `cc-usage outcome <agent-id> pass|review|fail --kind
+  build|layout|investigate|scout|review|other [--missed TEXT] [--retry-of ID] [--pair ID]`; it
+  holds tokens, cost and time per agent already (`cc-usage report`). The markdown ledger (the file
+  at `$CLAUDE_LEDGER` if set, else `~/.claude/model-performance.md`) keeps written comparisons.
+  Route by what the numbers show, not by habit.
 
 # Briefs and merging
 
