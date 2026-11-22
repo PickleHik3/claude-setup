@@ -21,8 +21,8 @@ Start with [docs/orchestration.md](docs/orchestration.md).
 | `agents/fixer.head.md`, `fixer-opus.head.md`, `fixer.body.md` | Parts of the two builder agents; the installer joins head and body into `fixer.md` and `fixer-opus.md` |
 | `hooks/model-gate.py` | PreToolUse gate on `Agent` and `Workflow` calls |
 | `docs/orchestration.md` | How the pieces fit together |
-| `bin/cc-usage`, `usage/` | Tokens, list-price cost, time and outcome per agent across sessions: `collect`, `outcome`, `report [--html]` |
-| `hooks/usage-collect.py` | Optional SessionEnd / SubagentStop hook that runs `cc-usage collect`; linked by the installer, not enabled |
+| `bin/cc-usage`, `usage/` | Tokens, list-price cost, time and outcome per agent across sessions and every `~/.claude*` profile (`CC_USAGE_CONFIG_DIRS` restricts): `collect`, `outcome`, `report [--profile] [--html]` |
+| `hooks/usage-collect.py` | SessionEnd / SubagentStop hook that runs `cc-usage collect`; linked and enabled by the installer |
 | `docs/usage-tracking.md` | What is measured, how cost is computed, its limits |
 | `skills/delegating/` | Loaded before a brief or a merge: the parts of a brief, worktree rules, the merge review |
 | `skills/wrap-up/` | `/wrap-up`: land or park a session's branches and remove its worktrees |

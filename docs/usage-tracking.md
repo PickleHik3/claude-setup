@@ -9,18 +9,28 @@ which model and effort each kind of task gets.
 ```bash
 cc-usage collect                      # scan transcripts into the database (incremental)
 cc-usage outcome <agent-id> pass|review|fail --kind build [--missed TEXT] [--retry-of ID] [--pair ID] [--note TEXT]
-cc-usage report [--since 7d|YYYY-MM-DD] [--project SUBSTR] [--session ID] [--html PATH]
+cc-usage report [--since 7d|YYYY-MM-DD] [--profile SUBSTR] [--project SUBSTR] [--session ID] [--html PATH]
 ```
 
-`report` prints: totals by role, workers by role x model x effort x kind, lead waves, cost per
+`report` prints: totals by role, totals by profile, workers by role x model x effort x kind, lead waves, cost per
 accepted outcome with retries, retries that changed model or effort, pair groups, the ten costliest
 agents, and workers with no recorded outcome. `--html` writes one self-contained file (inline SVG,
 dark mode, no requests).
 
 The database is `$CC_USAGE_DB`, default `~/.claude-memory/claude-setup/usage.db`. Prices are
 `usage/prices.json`, or the file `$CC_USAGE_PRICES`. `collect --reprice` recomputes every cost
-after a price change. To collect automatically, enable the hook described in `install.sh`
-(`hooks/usage-collect.py`, on SessionEnd and SubagentStop). The first collect reads every
+after a price change. `collect` reads every Claude Code profile: `~/.claude`, each `~/.claude_*` directory that has a
+`projects/` folder, and `$CLAUDE_CONFIG_DIR` if set. To restrict it, set `CC_USAGE_CONFIG_DIRS` to a
+colon-separated list of profile directories (it replaces the default list). Each agent records its
+profile (the folder name, e.g. `.claude_famn`); `report --profile famn` keeps one profile, and the
+report header lists the profiles included. All profiles share the one database. A database made
+before profiles existed is upgraded on first use, the profile read back from its stored file paths.
+`collect` holds a lock file (`collect.lock` beside the database); a second collect that starts
+meanwhile exits quietly, so two hooks firing together cannot collide.
+
+`./install.sh` enables the hook (`hooks/usage-collect.py`, on SessionEnd and SubagentStop, timeout
+60) in the profile it installs into, unless that profile's settings already name `usage-collect.py`.
+It collects all profiles whichever one ends a session. The first collect reads every
 transcript (minutes for several GB); later runs read only what was appended.
 
 ## What is measured

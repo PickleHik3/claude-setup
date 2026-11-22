@@ -14,7 +14,7 @@ What it relies on, checked on Claude Code 2.1.330 (2026-11-22). None of it is do
 - One API response may be split over several lines with the same requestId; usage is counted once.
 Cost is the API list-price equivalent from prices.json, not a bill.
 """
-import argparse, glob, json, os, re, sqlite3, statistics, sys, time
+import argparse, fcntl, glob, json, os, re, sqlite3, statistics, sys, time
 from datetime import datetime, timedelta, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -41,15 +41,38 @@ CREATE TABLE IF NOT EXISTS agents(
   description TEXT, model TEXT, effort TEXT, started_at TEXT, ended_at TEXT, wall_s REAL,
   active_s REAL, requests INT, tool_calls INT, input INT, cache_write_5m INT, cache_write_1h INT,
   cache_read INT, output INT, thinking INT, cost REAL, unpriced INT, fast INT, version TEXT,
-  last_epoch REAL, first_epoch REAL, PRIMARY KEY(session, agent_id));
+  last_epoch REAL, first_epoch REAL, profile TEXT, PRIMARY KEY(session, agent_id));
 CREATE TABLE IF NOT EXISTS outcomes(
   id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id TEXT, outcome TEXT, kind TEXT, missed TEXT,
   retry_of TEXT, pair TEXT, note TEXT, ts TEXT);
 """
 
 
-def config_dir():
-    return (os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")).rstrip("/")
+def config_dirs():
+    """Every Claude Code profile to scan. $CC_USAGE_CONFIG_DIRS (colon-separated) replaces the list;
+    otherwise ~/.claude, every ~/.claude_* directory that has a projects/ folder, and $CLAUDE_CONFIG_DIR."""
+    env = os.environ.get("CC_USAGE_CONFIG_DIRS")
+    if env is not None:
+        found = [d for d in env.split(":") if d.strip()]
+    else:
+        home = os.path.expanduser("~")
+        found = [os.path.join(home, ".claude")]
+        found += [d for d in sorted(glob.glob(os.path.join(home, ".claude_*")))
+                  if os.path.isdir(os.path.join(d, "projects"))]
+        if os.environ.get("CLAUDE_CONFIG_DIR"):
+            found.append(os.environ["CLAUDE_CONFIG_DIR"])
+    out, seen = [], set()
+    for d in found:
+        d = os.path.expanduser(d).rstrip("/")
+        real = os.path.realpath(d)
+        if real not in seen and os.path.isdir(os.path.join(d, "projects")):
+            seen.add(real)
+            out.append(d)
+    return out
+
+
+def profile_of(cfg):
+    return os.path.basename(cfg.rstrip("/"))
 
 
 def db_path():
@@ -62,11 +85,31 @@ _OPEN = []
 def connect():
     p = db_path()
     os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
-    conn = sqlite3.connect(p)
+    conn = sqlite3.connect(p, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    migrate(conn)
     _OPEN.append(conn)
     return conn
+
+
+def migrate(conn):
+    """Add agents.profile to a database made before profiles existed, filled from the stored paths."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(agents)")]
+    if "profile" not in cols:
+        conn.execute("ALTER TABLE agents ADD COLUMN profile TEXT")
+    if conn.execute("SELECT 1 FROM agents WHERE profile IS NULL LIMIT 1").fetchone():
+        for r in conn.execute("SELECT path FROM files").fetchall():
+            head, sep, rest = r["path"].partition("/projects/")
+            if not sep:
+                continue
+            parts = rest.split("/")
+            if len(parts) < 2:
+                continue
+            sid = parts[1][:-6] if parts[1].endswith(".jsonl") else parts[1]
+            conn.execute("UPDATE agents SET profile=? WHERE session=? AND profile IS NULL",
+                         (os.path.basename(head), sid))
+    conn.commit()
 
 
 # ---------------------------------------------------------------- prices
@@ -136,6 +179,7 @@ class Collector:
         self.unknown = set()
         self.touched = set()
         self.lines = 0
+        self.profile = None
 
     def warn(self, text):
         if text not in self.warned:
@@ -143,6 +187,7 @@ class Collector:
             print("cc-usage: warning: " + text, file=sys.stderr)
 
     def scan(self, cfg):
+        self.profile = profile_of(cfg)
         files = []
         for proj in sorted(glob.glob(os.path.join(cfg, "projects", "*"))):
             for p in glob.glob(os.path.join(proj, "*.jsonl")):
@@ -156,10 +201,12 @@ class Collector:
                 self.file(p, proj, sid, aid)
             except Exception as e:  # one bad file must not stop the scan
                 self.warn("%s: %s: %s" % (os.path.basename(p), type(e).__name__, e))
-        self.finish()
         for field, ver in self.missing.items():
             self.warn("transcript field missing: %s (Claude Code version %s); usage may be undercounted"
                       % (field, ver))
+
+    def done(self):
+        self.finish()
 
     def agent_row(self, sid, aid, proj):
         r = self.conn.execute("SELECT * FROM agents WHERE session=? AND agent_id=?", (sid, aid)).fetchone()
@@ -170,7 +217,8 @@ class Collector:
                 "model": None, "effort": None, "started_at": None, "ended_at": None, "wall_s": 0,
                 "active_s": 0, "requests": 0, "tool_calls": 0, "input": 0, "cache_write_5m": 0,
                 "cache_write_1h": 0, "cache_read": 0, "output": 0, "thinking": 0, "cost": 0,
-                "unpriced": 0, "fast": 0, "version": None, "last_epoch": None, "first_epoch": None}
+                "unpriced": 0, "fast": 0, "version": None, "last_epoch": None, "first_epoch": None,
+                "profile": self.profile}
 
     def apply_meta(self, a, path):
         mp = path[:-6] + ".meta.json"
@@ -190,6 +238,11 @@ class Collector:
         st = os.stat(path)
         row = self.conn.execute("SELECT * FROM files WHERE path=?", (path,)).fetchone()
         a = self.agent_row(sid, aid, proj)
+        if a.get("profile") and a["profile"] != self.profile:
+            self.warn("session %s agent %s is in both %s and %s: the second is skipped"
+                      % (sid[:8], aid, a["profile"], self.profile))
+            return
+        a["profile"] = self.profile
         if aid != "main":
             self.apply_meta(a, path)
         offset = 0
@@ -288,7 +341,7 @@ class Collector:
         cols = ["session", "agent_id", "project", "role", "parent_agent_id", "spawn_depth", "description",
                 "model", "effort", "started_at", "ended_at", "wall_s", "active_s", "requests", "tool_calls",
                 "input", "cache_write_5m", "cache_write_1h", "cache_read", "output", "thinking", "cost",
-                "unpriced", "fast", "version", "last_epoch", "first_epoch"]
+                "unpriced", "fast", "version", "last_epoch", "first_epoch", "profile"]
         if a["first_epoch"] is not None:
             a["started_at"] = iso_of(a["first_epoch"])
             a["ended_at"] = iso_of(a["last_epoch"])
@@ -331,10 +384,28 @@ class Collector:
 
 def cmd_collect(args):
     conn = connect()
+    # Two hooks can fire at once; one collect at a time, the other leaves quietly.
+    lock = open(os.path.join(os.path.dirname(db_path()) or ".", "collect.lock"), "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        lock.close()
+        if not args.quiet:
+            print("another collect is running; skipped")
+        return 0
+    try:
+        return collect_locked(args, conn)
+    finally:
+        lock.close()
+
+
+def collect_locked(args, conn):
     c = Collector(conn, load_prices())
     if args.reprice:
         c.reprice()
-    c.scan(config_dir())
+    for cfg in config_dirs():
+        c.scan(cfg)
+    c.done()
     if not args.quiet:
         n = conn.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
         r = conn.execute("SELECT COUNT(*) FROM requests").fetchone()[0]
@@ -403,6 +474,9 @@ def load(args):
     if since:
         where.append("started_at >= ?")
         par.append(since)
+    if args.profile:
+        where.append("LOWER(COALESCE(profile, '')) LIKE ?")
+        par.append("%" + args.profile.lower() + "%")
     if args.project:
         where.append("LOWER(project) LIKE ?")
         par.append("%" + args.project.lower() + "%")
@@ -488,6 +562,14 @@ def build_sections(agents, reqs, by_id):
         fmt_c(mc), 100 * mc / total if total else 0, fmt_c(wc), 100 * wc / total if total else 0, GAP_CAP)
     S.append(dict(id="roles", title="Totals by role", headers=["role", "agents", "input", "cache write", "cache read",
                   "output", "cost", "wall", "active", "share"], rows=rows, note=note))
+    profs = {}
+    for a in agents:
+        p = profs.setdefault(a.get("profile") or "?", dict(n=0, cost=0))
+        p["n"] += 1
+        p["cost"] += a["cost"]
+    S.append(dict(id="profiles", title="Totals by profile", headers=["profile", "agents", "cost", "share"],
+                  rows=[[k, v["n"], fmt_c(v["cost"]), "%.1f%%" % (100 * v["cost"] / total) if total else "-"]
+                        for k, v in sorted(profs.items(), key=lambda kv: -kv[1]["cost"])]))
     # (b) role x model x effort x kind
     groups = {}
     for a in workers:
@@ -756,6 +838,7 @@ def cmd_report(args):
               "on a subscription it is a comparison figure.%s" % (
                   load_prices().get("as_of"),
                   " %d requests have an unknown model and no cost." % unpriced if unpriced else ""))
+    header += " Profiles included: %s." % ", ".join(sorted({a.get("profile") or "?" for a in agents}))
     S = build_sections(agents, reqs, by_id)
     print(render_text(S, header))
     if args.html:
@@ -784,6 +867,7 @@ def main(argv=None):
     r = sub.add_parser("report", help="tables, optionally one HTML file")
     r.add_argument("--since")
     r.add_argument("--project")
+    r.add_argument("--profile", help="only agents whose profile folder name contains this text")
     r.add_argument("--session")
     r.add_argument("--html")
     r.set_defaults(fn=cmd_report)

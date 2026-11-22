@@ -1,5 +1,5 @@
 """Tests for cc-usage on synthetic transcripts. Run: python3 -m unittest usage/test_cc_usage.py"""
-import contextlib, io, json, os, sys, tempfile, unittest
+import contextlib, fcntl, io, json, os, sqlite3, subprocess, sys, tempfile, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cc_usage  # noqa: E402
@@ -33,8 +33,8 @@ class Base(unittest.TestCase):
         self.cfg = os.path.join(t, "cfg")
         self.proj = os.path.join(self.cfg, "projects", "-work-proj")
         os.makedirs(self.proj)
-        self.env = {"CLAUDE_CONFIG_DIR": self.cfg, "CC_USAGE_DB": os.path.join(t, "db", "u.db")}
-        self.old = {k: os.environ.get(k) for k in list(self.env) + ["CC_USAGE_PRICES"]}
+        self.env = {"CC_USAGE_CONFIG_DIRS": self.cfg, "CC_USAGE_DB": os.path.join(t, "db", "u.db")}
+        self.old = {k: os.environ.get(k) for k in list(self.env) + ["CC_USAGE_PRICES", "CLAUDE_CONFIG_DIR", "HOME"]}
         os.environ.update(self.env)
         os.environ.pop("CC_USAGE_PRICES", None)
 
@@ -234,6 +234,114 @@ class TestWarnings(Base):
         self.assertNotIn("http://", text.replace("http://www.w3.org", ""))
         self.assertNotIn("<script", text)
         self.assertIn("prefers-color-scheme:dark", text)
+
+
+def write_profile(root, name, sid, lines):
+    proj = os.path.join(root, name, "projects", "-work-proj")
+    os.makedirs(proj, exist_ok=True)
+    with open(os.path.join(proj, sid + ".jsonl"), "w") as f:
+        for d in lines:
+            f.write(json.dumps(d) + "\n")
+
+
+class TestProfiles(Base):
+    def two_profiles(self):
+        home = os.path.join(self.tmp.name, "home")
+        write_profile(home, ".claude", "s-one", [line("2026-11-20T10:00:00Z", u=usage(inp=1000000), req="a", sessionId="s-one")])
+        write_profile(home, ".claude_famn", "s-two", [line("2026-11-20T11:00:00Z", u=usage(inp=2000000), req="b", sessionId="s-two")])
+        os.makedirs(os.path.join(home, ".claude_empty"))          # no projects/: ignored
+        open(os.path.join(home, ".claude.json"), "w").close()     # a file: ignored
+        return home
+
+    def test_default_discovery_and_profile_column(self):
+        home = self.two_profiles()
+        os.environ.pop("CC_USAGE_CONFIG_DIRS")
+        os.environ.pop("CLAUDE_CONFIG_DIR", None)
+        os.environ["HOME"] = home
+        self.run_cli("collect", "--quiet")
+        prof = {r["session"]: r["profile"] for r in cc_usage.connect().execute("SELECT session, profile FROM agents")}
+        self.assertEqual(prof, {"s-one": ".claude", "s-two": ".claude_famn"})
+
+    def test_override_limits_profiles(self):
+        home = self.two_profiles()
+        os.environ["CC_USAGE_CONFIG_DIRS"] = os.path.join(home, ".claude_famn")
+        self.run_cli("collect", "--quiet")
+        self.assertEqual({r["profile"] for r in cc_usage.connect().execute("SELECT profile FROM agents")},
+                         {".claude_famn"})
+
+    def test_report_profile_filter_and_table(self):
+        home = self.two_profiles()
+        os.environ["CC_USAGE_CONFIG_DIRS"] = ":".join(os.path.join(home, d) for d in (".claude", ".claude_famn"))
+        self.run_cli("collect", "--quiet")
+        rc, out, err = self.run_cli("report")
+        self.assertIn("Totals by profile", out)
+        self.assertIn("Profiles included: .claude, .claude_famn", out)
+        prof = out.split("== Totals by profile ==")[1].split("\n== ")[0]
+        self.assertIn("$8.00", prof)
+        self.assertIn("66.7%", prof)
+        rc, out, err = self.run_cli("report", "--profile", "famn")
+        self.assertIn("Profiles included: .claude_famn.", out)
+        self.assertNotIn(".claude,", out)
+
+    def test_duplicate_session_in_two_profiles_is_skipped(self):
+        home = self.two_profiles()
+        write_profile(home, ".claude_famn", "s-one", [line("2026-11-20T10:00:00Z", u=usage(inp=5), req="a", sessionId="s-one")])
+        os.environ["CC_USAGE_CONFIG_DIRS"] = ":".join(os.path.join(home, d) for d in (".claude", ".claude_famn"))
+        rc, out, err = self.run_cli("collect", "--quiet")
+        self.assertIn("both .claude and .claude_famn", err)
+        self.assertEqual(len(list(cc_usage.connect().execute("SELECT * FROM agents WHERE session='s-one'"))), 1)
+
+    def test_migrates_old_schema_db(self):
+        db = os.environ["CC_USAGE_DB"]
+        os.makedirs(os.path.dirname(db))
+        old = sqlite3.connect(db)
+        old.executescript(cc_usage.SCHEMA.replace(", profile TEXT, PRIMARY KEY", ", PRIMARY KEY"))
+        old.execute("INSERT INTO agents(session, agent_id, project, role) VALUES('sx','main','p','main')")
+        old.execute("INSERT INTO agents(session, agent_id, project, role) VALUES('sy','a1','p','fixer')")
+        old.execute("INSERT INTO files VALUES('/h/.claude_lib/projects/-p/sx.jsonl',1,1,1)")
+        old.execute("INSERT INTO files VALUES('/h/.claude_syd/projects/-p/sy/subagents/agent-a1.jsonl',1,1,1)")
+        old.commit()
+        old.close()
+        self.assertNotIn("profile", [r[1] for r in sqlite3.connect(db).execute("PRAGMA table_info(agents)")])
+        self.run_cli("collect", "--quiet")
+        prof = {r["session"]: r["profile"] for r in cc_usage.connect().execute("SELECT session, profile FROM agents")}
+        self.assertEqual(prof, {"sx": ".claude_lib", "sy": ".claude_syd"})
+
+    def test_concurrent_collect_is_skipped_while_locked(self):
+        self.main_file([line("2026-11-20T10:00:00Z", u=usage(inp=1))])
+        cc_usage.connect().close()
+        lock = open(os.path.join(os.path.dirname(os.environ["CC_USAGE_DB"]), "collect.lock"), "w")
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        rc, out, err = self.run_cli("collect")
+        self.assertEqual(rc, 0)
+        self.assertIn("skipped", out)
+        self.assertEqual(self.agents(), {})
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
+        self.run_cli("collect", "--quiet")
+        self.assertIn("main", self.agents())
+
+
+class TestInstallMerge(unittest.TestCase):
+    def test_hooks_merged_once_and_existing_kept(self):
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with tempfile.TemporaryDirectory() as t:
+            cfg = os.path.join(t, ".claude_x")
+            os.makedirs(cfg)
+            mine = {"hooks": [{"type": "command", "command": 'python3 "/elsewhere/hooks/usage-collect.py"', "timeout": 60}]}
+            with open(os.path.join(cfg, "settings.json"), "w") as f:
+                json.dump({"keep": 1, "hooks": {"SessionEnd": [mine]}}, f)
+            env = dict(os.environ, HOME=t, CLAUDE_CONFIG_DIR=cfg, CLAUDE_SETUP_NO_SYSTEM="1")
+            for _ in range(2):
+                subprocess.run(["bash", os.path.join(repo, "install.sh")], env=env, check=True, capture_output=True)
+            with open(os.path.join(cfg, "settings.json")) as f:
+                data = json.load(f)
+            self.assertEqual(data["keep"], 1)
+            self.assertEqual(data["hooks"]["SessionEnd"], [mine])
+            sub = data["hooks"]["SubagentStop"]
+            self.assertEqual(sub, [{"hooks": [{"type": "command", "timeout": 60,
+                                               "command": 'python3 "%s/hooks/usage-collect.py"' % cfg}]}])
+            self.assertEqual(len(data["hooks"]["PreToolUse"]), 1)
 
 
 if __name__ == "__main__":

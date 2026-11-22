@@ -81,6 +81,16 @@ if not gates:
 for gate in gates:
     # A gate that crashes or times out blocks the call instead of letting it through.
     gate["onFailure"] = "block"
+# Collect usage after every session and subagent (docs/usage-tracking.md). The hook always exits 0
+# and collects every profile, so it is the same whichever profile's session ends. An entry whose
+# command already names usage-collect.py is kept as it is, so a re-run adds no second one.
+for event in ("SessionEnd", "SubagentStop"):
+    entries = data["hooks"].setdefault(event, [])
+    if not any("usage-collect.py" in h.get("command", "")
+               for entry in entries for h in entry.get("hooks", [])):
+        entries.append({"hooks": [{"type": "command",
+                                   "command": 'python3 "%s/hooks/usage-collect.py"' % config_dir,
+                                   "timeout": 60}]})
 # diagnosing-bugs (mattpocock-skills) matches every bug report and refuses to fix without a
 # scripted reproduction; keep it for "diagnose" by hand. An existing choice is kept.
 data.setdefault("skillOverrides", {}).setdefault(
@@ -90,14 +100,6 @@ with open(path, "w") as f:
     f.write("\n")
 PY
 echo "merged settings into $SETTINGS (previous copy: $SETTINGS.bak)"
-
-# OPT-IN, NOT ENABLED: collect usage automatically (docs/usage-tracking.md). To enable, merge this
-# into settings.json by hand, or move it into the python block above after review. The hook always
-# exits 0, so it cannot block a session. Without it, run `cc-usage collect` before `cc-usage report`.
-#   "hooks": {
-#     "SessionEnd":   [{"hooks": [{"type": "command", "command": "python3 \"<config dir>/hooks/usage-collect.py\"", "timeout": 120}]}],
-#     "SubagentStop": [{"hooks": [{"type": "command", "command": "python3 \"<config dir>/hooks/usage-collect.py\"", "timeout": 120}]}]
-#   }
 
 # Android module.
 if [ "$ANDROID" = 1 ]; then
