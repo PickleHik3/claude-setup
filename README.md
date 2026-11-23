@@ -19,6 +19,7 @@ Start with [docs/orchestration.md](docs/orchestration.md).
 | `agents/Explore.md` | Read-only scout on Haiku, at medium effort |
 | `agents/fixer.head.md`, `fixer-opus.head.md`, `fixer.body.md` | Parts of the two builder agents; the installer joins head and body into `fixer.md` and `fixer-opus.md` |
 | `hooks/model-gate.py` | PreToolUse gate on `Agent` and `Workflow` calls |
+| `hooks/resume-gate.py` | PreToolUse hook on `SendMessage`: before a cold worker is resumed, gives the rewrite cost and its handoff, and denies once when a fresh spawn may be cheaper |
 | `docs/orchestration.md` | How the pieces fit together |
 | `bin/cc-usage`, `usage/` | Tokens, list-price cost, time and outcome per agent across sessions and every `~/.claude*` profile (`CC_USAGE_CONFIG_DIRS` restricts): `collect`, `outcome`, `report [--profile] [--html]` |
 | `hooks/usage-collect.py` | SessionEnd / SubagentStop hook that runs `cc-usage collect`; linked and enabled by the installer |

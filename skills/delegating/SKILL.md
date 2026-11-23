@@ -7,7 +7,9 @@ description: Briefing a worker and merging its branch - the parts of a brief, th
 
 Goal · files in scope with the method names and line numbers to edit (verified at the base
 commit) · constraints · what is known, including the cause for a fix · verify commands to run (or
-"per AGENTS.md") · report format.
+"per AGENTS.md") · report format · handoff path: `<scratchpad>/handoffs/<branch>.md` (the
+session's scratchpad directory, written out in full; fixers write a handoff there before every
+report).
 
 - One goal per brief. Builders build: cause-finding goes to Explore or a reproduction first. When
   the cause is unclear or one fix has already missed, reproduce it and put that in the brief.
@@ -42,6 +44,19 @@ commit) · constraints · what is known, including the cause for a fix · verify
    only the failures. Then remove the worktree and branch (`/wrap-up` does this at session end).
 - Stay on the branch a shared main checkout is on, and address other worktrees with `git -C
   <path>` in background chains.
+
+# Resuming a worker
+
+A worker's prompt cache lasts 5 minutes from its last request. Within it a resume is cheap; after
+it the resume rewrites the worker's whole context (about 25x a warm resume: ~$1.10 for a 220k
+fixer-opus, ~$0.45 for a 150k fixer).
+- Send a fix-up as soon as the report and diff show it is needed, before the build, the full suite
+  and any other long check; merge after the worker's second round.
+- When `resume-gate` denies a message to a cold worker, choose: a fresh worker (same agent, or a
+  different model) briefed with the handoff path and the follow-up, when the handoff covers what
+  the follow-up needs; or the same message again to resume, when the follow-up depends on what the
+  worker read and the handoff leaves out. Record a fresh worker with `--retry-of <first id>`.
+- A worker that stopped with no commits is always continued fresh (step 2 above).
 
 # Recording the outcome
 

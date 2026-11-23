@@ -142,6 +142,32 @@ each turn assigned to the nearest worker; an estimate.
 `cc-usage report` keeps its "Lead waves" table for this
 history; the agent file is gone and the gate denies `lead`.
 
+## Resuming workers
+
+Decided 2026-11-23, from the transcripts of 2026-10-24 to 2026-11-23 and the Claude Code docs
+(prompt-caching, sub-agents, settings reference):
+
+- A subagent's prompt cache lives 5 minutes; the main session's lives 1 hour on a subscription.
+  A resumed worker keeps its full history, so a resume after 5 idle minutes rewrites all of it at
+  1.25x input, against 0.05x for a cache read on Opus 5.5 and Sonnet 5.5.
+- Of 69 `fixer-opus` resumes, 57% came after the cache expired (median idle 8.8 min, median
+  context 223k): the merge review, build and suite ran before the fix-up was sent. `fixer`
+  resumes were 24% cold (median idle 0.4 min). A cold first request cost $1.13 against $0.07 warm
+  on `fixer-opus`. Requests after a resume cost about twice a first-run request (larger context).
+- Not adopted: the 1-hour cache for subagents (`subagentPromptCacheTtl`, or `cacheTtl` in an
+  agent's frontmatter). Workers write constantly and idle rarely; 1-hour writes at 2x would have
+  cost about $192 more on `fixer-opus` and $115 on `fixer`, against at most ~$100 and ~$30 saved.
+- Adopted: fix-ups go to a worker before the long checks; fixers write a handoff before every
+  report (about $0.01 of output each), to the session scratchpad, so a cold worker can be replaced
+  by a fresh one briefed from it; `hooks/resume-gate.py` reports idle time, context and rewrite
+  cost before a cold resume, and denies the first send only when a handoff exists and the context
+  is 60k or more. A second send goes through: the main session decides, because a cold resume is
+  still right when the follow-up needs what the handoff leaves out. A denied send costs one main
+  turn (a few cents); a hard block was rejected because some workers write no handoff.
+- The handoff follows "Handoff artifact" in mattpocock's dictionary-of-ai-coding: written for a
+  reader with no context and no way to ask, with decisions and their reasons so the next worker
+  does not reopen them, and claims to check against the code.
+
 ## Worktree pitfalls
 
 - With the default base, a worker's worktree can be cut from origin rather than the session's

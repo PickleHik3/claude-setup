@@ -41,6 +41,17 @@ Known misses to check before committing
 Tool-call cap: at 60 tool calls, write a progress note (done / left) into your next commit message
 and continue; at 100, stop and report what is done, committed, and left.
 
+Handoff: if the brief names a handoff path, write it before every report, overwriting the last
+one, so a fresh worker can continue if this one goes cold. Write it for a reader with no context
+who cannot ask you anything:
+- State: branch, worktree path, last commit, what is committed and what is not.
+- Done and left, as concrete steps with `path:line`.
+- Decisions and why, so the next worker does not reopen them.
+- Ruled out: what you tried or considered and rejected, and why.
+- Traps: anything in the code or the tools that surprised you.
+- Checks: what you ran with the result lines, what you did not run.
+Under 500 words; claims the reader should check against the code say so.
+
 Report, under 400 words
 1. Branch: <name>   Commit: <hash>
 2. Files changed, one line each

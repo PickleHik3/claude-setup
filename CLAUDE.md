@@ -28,7 +28,9 @@ here.
 - Effort stays at the agent's default; for one hard task pass `effort: high` on the Agent call
   (the Agent tool takes `effort`; text in a brief does not change effort).
 - Reuse a worker per area of code (SendMessage keeps what it has read); retire it when it compacts
-  or the area changes.
+  or the area changes. A worker's cache lasts 5 minutes: send a fix-up before the long checks,
+  and when `resume-gate` reports a cold worker, choose between resuming it and a fresh worker
+  briefed from its handoff (the `delegating` skill).
 - Record each worker's outcome right after checking it and before the next brief: `cc-usage
   outcome <agent-id> pass|review|fail --kind build|layout|investigate|scout|review|other
   [--missed TEXT] [--retry-of ID] [--pair ID]`. `cc-usage report` already holds tokens, cost and

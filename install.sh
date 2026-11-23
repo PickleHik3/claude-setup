@@ -39,6 +39,7 @@ link skills/delegating "$CLAUDE/skills/delegating"
 link bin/agent-tidy "$HOME/.local/bin/agent-tidy"
 link bin/cc-usage "$HOME/.local/bin/cc-usage"
 link hooks/usage-collect.py "$CLAUDE/hooks/usage-collect.py"
+link hooks/resume-gate.py "$CLAUDE/hooks/resume-gate.py"
 link systemd/agent-tidy.service "$UNITS/agent-tidy.service"
 link systemd/agent-tidy.timer "$UNITS/agent-tidy.timer"
 
@@ -82,6 +83,13 @@ if not gates:
 for gate in gates:
     # A gate that crashes or times out blocks the call instead of letting it through.
     gate["onFailure"] = "block"
+# Before resuming a worker, say what a cold resume costs (docs/orchestration.md, "Resuming
+# workers"). Advice, not policy: it fails open. An existing entry is kept as it is.
+if not any("resume-gate.py" in h.get("command", "") for entry in pre for h in entry.get("hooks", [])):
+    pre.append({"matcher": "^SendMessage$",
+                "hooks": [{"type": "command",
+                           "command": 'python3 "%s/hooks/resume-gate.py"' % config_dir,
+                           "timeout": 10}]})
 # Collect usage after every session and subagent (docs/usage-tracking.md). The hook always exits 0
 # and collects every profile, so it is the same whichever profile's session ends. An entry whose
 # command already names usage-collect.py is kept as it is, so a re-run adds no second one.
