@@ -31,7 +31,8 @@ link() { # <repo path> <target>
 # 1. Core links.
 link CLAUDE.md "$CLAUDE/CLAUDE.md"
 link agents/Explore.md "$CLAUDE/agents/Explore.md"
-link agents/lead.md "$CLAUDE/agents/lead.md"
+# lead is retired (docs/orchestration.md); drop a link an earlier install made.
+[ -L "$CLAUDE/agents/lead.md" ] && rm "$CLAUDE/agents/lead.md" && echo "removed retired $CLAUDE/agents/lead.md"
 link hooks/model-gate.py "$CLAUDE/hooks/model-gate.py"
 link skills/wrap-up "$CLAUDE/skills/wrap-up"
 link skills/delegating "$CLAUDE/skills/delegating"
@@ -66,8 +67,8 @@ data = json.loads(text) if text.strip() else {}
 shutil.copyfile(path, path + ".bak")
 env = data.setdefault("env", {})
 env["CLAUDE_CODE_SUBAGENT_MODEL"] = "sonnet"
-# main -> lead -> fixer -> Explore is three deep.
-env["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"] = "3"
+# main -> fixer -> Explore is two deep.
+env["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"] = "2"
 pre = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
 gates = [h for entry in pre for h in entry.get("hooks", [])
          if "model-gate.py" in h.get("command", "")]

@@ -46,7 +46,6 @@ flowchart LR
 | Explore | Haiku | medium | Read-only search; returns conclusions, spawns nothing. |
 | `fixer` | Sonnet | medium | Default builder in its own worktree. |
 | `fixer-opus` | Opus | medium | The same worker for the named cases below. |
-| `lead` | Opus | medium | Runs one wave: decides, briefs fixers one at a time, checks them, reports once with raw evidence. Most useful under a Fable main session; an Opus main session can lead a wave itself. |
 
 Effort stays at each agent's default. For one hard task the main session passes `effort: high` on
 the Agent call; text inside a brief does not change effort.
@@ -101,10 +100,8 @@ longer write-up for 152k tokens against 131k).
   session; a subagent, workflow agent or fork must not silently inherit it.
 - A subagent may spawn only Explore, on Haiku, with no model override. Workers do not fan out;
   the main session decides what happens next.
-- The one exception is `lead`: it may also spawn `fixer` and `device-checker`, with no model
-  override, and never another `lead` or `fixer-opus`. The hook tells a lead by the `agent_type`
-  field of its input. The chain main, lead, fixer, Explore is three deep, which is why the
-  installer sets `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=3`.
+- Nobody spawns `lead` (see "Why there is no lead"). The chain main, fixer, Explore is two deep,
+  which is why the installer sets `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2`.
 - A Workflow is denied when a model is set to Fable in its script or input. From a session on
   Fable (or one whose model the gate cannot read) it is also denied unless every `agent(` call
   in the script names a model, because an agent with no model runs on the session's model.
@@ -114,6 +111,46 @@ longer write-up for 152k tokens against 131k).
 The point is cost and predictability: nested agents multiply usage invisibly, and the main
 session is the only place where the routing decision has the full picture.
 `hooks/test_model_gate.sh` holds the cases.
+
+## Why there is no lead
+
+From 2026-11-10 to 2026-11-23 an Opus `lead` agent sat between the main session and the fixers:
+it took one wave, briefed fixers one at a time, checked them and reported once. The idea was that
+the main session would stop paying to read every fixer's report. `cc-usage` data over those two
+weeks (61 lead waves with 213 fixer tickets, against 348 tickets the main session briefed
+directly, across four profiles) showed it did not pay:
+
+| Per ticket | Through a lead | Main → fixer |
+|---|---|---|
+| Fixer | $1.44 | $1.30 |
+| Lead | $2.19 | – |
+| Main session briefing and reviewing* | $0.42 | $1.33 |
+| **Total** | **$4.05** | **$2.63** |
+| Median wall time | 16.8 min | 8.3 min |
+
+\*Main-session turns within 5 minutes before a worker started or 15 minutes after it ended,
+each turn assigned to the nearest worker; an estimate.
+
+- The lead cost more than the work it supervised: a median 64% of each wave's cost.
+- It saved the main session about $0.91 per ticket and added $2.19.
+- Whole sessions agree: main-session cost per fixer ticket was $2.13 with leads and $2.08
+  without, and the main context per turn was no smaller (median 256k tokens read against 227k).
+- A lead runs fixers one after another, so a ticket took twice as long as parallel direct
+  briefs.
+- Quality could not be compared: 86% of lead-run tickets had no recorded outcome.
+
+What a lead was meant to buy, a small main context, comes cheaper from starting a fresh main
+conversation after each wave (below). `cc-usage report` keeps its "Lead waves" table for this
+history; the agent file is gone and the gate denies `lead`.
+
+## Fresh main sessions
+
+Every main-session turn rereads the whole conversation. Over the same two weeks a main turn
+read a median of about 250k tokens of cache and cost $0.087 on Opus and $0.156 on Fable. That
+reread, not the workers, is the largest line in most sessions. So when a wave is merged and
+checked, or the context passes about 150k tokens, the session suggests `/wrap-up` and a new
+conversation. `/wrap-up` records missing outcomes and leaves one "In flight" line per open thread
+in `MEMORY.md`, which the next session loads.
 
 ## Worktree pitfalls
 
@@ -131,7 +168,8 @@ session is the only place where the routing decision has the full picture.
 
 ## Keeping the ledger
 
-Log every worker outcome in a private file: `$CLAUDE_LEDGER` if set, else
+Record every worker's outcome with `cc-usage outcome` in the main session, right after its merge
+review and before the next brief; `/wrap-up` records any the session missed. Separately, log every worker outcome in a private file: `$CLAUDE_LEDGER` if set, else
 `~/.claude/model-performance.md`. One line each: date, agent, effort, task kind, pass / pass with
 review / fail, what it missed, tokens and calls. Keep it outside the repo. Routing rules in
 `CLAUDE.md` should change when the ledger changes, for example when Sonnet fails a kind of task

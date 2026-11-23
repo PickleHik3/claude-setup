@@ -1,42 +1,44 @@
 # Delegation
 
-The main session orchestrates; the goal is the least usage and the smallest main context that
-still gets the work right. Delegate when a worker saves more reading than its startup costs
-(about 10k tokens); small edits in files already in context stay here.
+The main session orchestrates and briefs every worker itself; the goal is the least usage and
+the smallest main context that still gets the work right. Delegate when a worker saves more
+reading than its startup costs (about 10k tokens); small edits in files already in context stay
+here.
 
 | Agent | Model | Use for |
 |---|---|---|
 | Explore | Haiku | Read-only search and reading; returns the conclusion with `path:line`. |
 | fixer | Sonnet | The default builder: any specified change at any size, including geometry or layout with a checkable spec. |
 | fixer-opus | Opus | Only when the premise may be wrong, a fixer round already missed once, a renderer or pipeline is being replaced, or the spec should be challenged before building. |
-| lead | Opus | One bounded wave of multi-step work that needs judgement at a few points and typing in between. It fixes the list, briefs fixers one at a time, checks them and hands back one report with raw evidence. |
 
 - Investigation (unknown cause) goes to Explore or a reproduction first, never to a builder with
   the investigation in the brief. A cause is unknown when nothing in the code fits what the user
   described, not when it is merely unproven: the user's description counts as the reproduction,
   and a likely cause that fits it goes straight to a fix.
 - Subagents never run on Fable; Fable is the main session's model, chosen by the user. Workers may
-  spawn only Explore; Explore spawns nothing. The exception is `lead`, which may also spawn
-  `fixer` and `device-checker`, never `lead` or `fixer-opus`. `hooks/model-gate.py` enforces all
-  of it.
+  spawn only Explore; Explore spawns nothing. `hooks/model-gate.py` enforces it, and denies the
+  retired `lead` agent (docs/orchestration.md, "Why there is no lead").
 - Opus is for judgement, not typing. Once the premise is settled and the change list is fixed
   (a verbatim move, a substitution, a scripted pass), the builder is `fixer`, however large the
   change; the guard is a mechanical check of the result, which works the same for any model.
-- Use `lead` when the main session would otherwise read every worker's report for one wave:
-  most of all when the main session runs on Fable, where each report costs the most. When the
-  main session runs on Opus it can lead a wave itself, so `lead` earns its place only for a long
-  wave, or two waves running side by side. One lead per wave; the main session keeps the user's
-  decisions, merges into shared checkouts, real devices, memory and the ledger.
+- Brief the fixers of a wave in one message when their seams are disjoint, so they run in
+  parallel.
+- The main context is the largest cost: every turn rereads all of it, and a Fable turn costs
+  about twice an Opus one. When a wave is merged and checked, or the context passes about 150k
+  tokens, tell the user it is a good point to `/wrap-up` and start a new conversation; the
+  "In flight" lines in `MEMORY.md` carry the thread across.
 - A worker's full report goes to a file; what comes back into the main context is short (the
   outcome, the raw result lines, what was not verified, the file's path).
 - Effort stays at the agent's default; for one hard task pass `effort: high` on the Agent call
   (the Agent tool takes `effort`; text in a brief does not change effort).
 - Reuse a worker per area of code (SendMessage keeps what it has read); retire it when it compacts
   or the area changes.
-- Record each worker's outcome with `cc-usage outcome <agent-id> pass|review|fail --kind
-  build|layout|investigate|scout|review|other [--missed TEXT] [--retry-of ID] [--pair ID]`; it
-  holds tokens, cost and time per agent already (`cc-usage report`). The markdown ledger (the file
-  at `$CLAUDE_LEDGER` if set, else `~/.claude/model-performance.md`) keeps written comparisons.
+- Record each worker's outcome right after checking it and before the next brief: `cc-usage
+  outcome <agent-id> pass|review|fail --kind build|layout|investigate|scout|review|other
+  [--missed TEXT] [--retry-of ID] [--pair ID]`. `cc-usage report` already holds tokens, cost and
+  time per agent; the outcome is the one thing only this session can add. The markdown ledger
+  (the file at `$CLAUDE_LEDGER` if set, else `~/.claude/model-performance.md`) keeps written
+  comparisons.
   Route by what the numbers show, not by habit.
 
 # Briefs and merging

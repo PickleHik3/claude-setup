@@ -1,6 +1,6 @@
 ---
 name: delegating
-description: Briefing a worker and merging its branch - the parts of a brief, the base-hash and worktree rules, the review before a merge and the checks after. Use before spawning fixer, fixer-opus or lead, and before merging a worker's work.
+description: Briefing a worker and merging its branch - the parts of a brief, the base-hash and worktree rules, the review before a merge and the checks after. Use before spawning fixer or fixer-opus, and before merging a worker's work.
 ---
 
 # Briefs
@@ -45,8 +45,9 @@ commit) · constraints · what is known, including the cause for a fix · verify
 
 # Recording the outcome
 
-After checking a worker, run `cc-usage outcome <agent-id> pass|review|fail --kind <kind>` (review
-= passed after you fixed something). Give `--missed` when it failed, and `--retry-of <first id>`
-on a re-brief, so a retry's cost counts toward its task. Use `--pair` to tie two workers given the
+Right after the merge review of each worker (step 4 above), before briefing the next one, run
+`cc-usage outcome <agent-id> pass|review|fail --kind <kind>` from this session's Bash (review =
+passed after you fixed something; fail = not merged as it was). Give `--missed` when it failed,
+and `--retry-of <first id>` on a re-brief, so a retry's cost counts toward its task. Use `--pair` to tie two workers given the
 same task to compare models. The agent id is in the worker's completion notice; a unique prefix
 works. Written comparisons still go in the markdown ledger.

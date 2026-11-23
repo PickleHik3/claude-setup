@@ -1,6 +1,6 @@
 # Usage tracking
 
-`cc-usage` shows, across sessions, what the main chat, leads, fixers, Explore and other
+`cc-usage` shows, across sessions, what the main chat, fixers, Explore and other
 subagents cost in tokens, dollars and time, and whether each worker's task worked. Use it to tune
 which model and effort each kind of task gets.
 
@@ -12,7 +12,8 @@ cc-usage outcome <agent-id> pass|review|fail --kind build [--missed TEXT] [--ret
 cc-usage report [--since 7d|YYYY-MM-DD] [--profile SUBSTR] [--project SUBSTR] [--session ID] [--html PATH]
 ```
 
-`report` prints: totals by role, totals by profile, workers by role x model x effort x kind, lead waves, cost per
+`report` prints: totals by role, totals by profile, workers by role x model x effort x kind, lead waves (historical: `lead` was retired on
+2026-11-23), cost per
 accepted outcome with retries, retries that changed model or effort, pair groups, the ten costliest
 agents, and workers with no recorded outcome. `--html` writes one self-contained file (inline SVG,
 dark mode, no requests).
@@ -55,7 +56,9 @@ and a warning, never a guess.
 - Cost is the API list-price equivalent. On a subscription it is a comparison figure, not a bill.
 - Wall time of parallel agents overlaps, so wall times do not add up to the session's length.
   Active time ignores idle gaps over five minutes but still includes waiting on tools.
-- An outcome is a judgement, recorded by hand. The latest label for an agent wins.
+- An outcome is a judgement, recorded by hand in the main session right after it checks a worker
+  (the `delegating` skill), with `/wrap-up` catching the rest. The latest label for an agent wins.
+  An unrecorded outcome drops the worker out of every pass-rate figure.
 - The transcript format is undocumented (checked on Claude Code 2.1.330). `collect` warns, with the
   version, when a field it needs is missing; the totals are then low.
 - A subagent with no meta file has role `unknown` (or the line's `attributionAgent`) and no parent.

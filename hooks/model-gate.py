@@ -4,9 +4,8 @@
 - The main session may spawn anything except Fable (model param, agent frontmatter, or a fork
   while the main session itself runs Fable). Fable is for the main session only, chosen by the user.
 - A subagent may spawn only the Explore agent (Haiku); nothing else, and no model override.
-- The one exception is the `lead` agent (Opus): it may also spawn `fixer` and `device-checker`,
-  with no model override, so it can run one wave of work and hand back a single report. A lead
-  never spawns another lead or `fixer-opus`.
+- Nobody spawns `lead`: it was retired on 2026-11-23 because it cost more per ticket than the
+  fixers it ran (docs/orchestration.md). The main session briefs fixers itself.
 - A Workflow is denied when a model is set to Fable (a `model` option in its script, or a `model`
   key anywhere in its input; merely mentioning Fable in a prompt is allowed). From a main session
   that runs Fable, or whose model cannot be read, it is also denied unless every `agent(` call in
@@ -16,7 +15,7 @@ These are this setup's policies; Claude Code itself allows any of it. The gate f
 error inside it denies the call, because a gate that lets a call through when it breaks is no gate.
 
 What it relies on, checked on Claude Code 2.1.322 (2026-11-10): a tool call made by a subagent
-carries `agent_id` and `agent_type`, and `agent_type` is the agent's name ("fixer", "lead"); the
+carries `agent_id` and `agent_type`, and `agent_type` is the agent's name ("fixer", "Explore"); the
 Agent tool's input has `subagent_type` (with "fork" for a fork) and `model`. The main session's
 model is read from the transcript's JSON lines, whose shape is not documented and may lag a turn,
 so an unreadable model is treated as Fable.
@@ -24,7 +23,6 @@ so an unreadable model is treated as Fable.
 import json, os, re, sys
 
 NESTED_OK = {"Explore"}
-LEAD_OK = {"Explore", "fixer", "device-checker"}
 
 
 def agent_dirs(cwd):
@@ -151,14 +149,12 @@ def main():
     if nested:
         if st in NESTED_OK and model in ("", "haiku"):
             return
-        if d.get("agent_type") == "lead":
-            if st in LEAD_OK and not model:
-                return
-            return deny("A lead may spawn only fixer, Explore and device-checker, with no model "
-                        "override. Do the rest yourself or return it under 'Decisions needed'.")
         return deny("A subagent may spawn only the Explore agent (Haiku) for reading, with no model "
                     "override. Do the work yourself or report what you need to the main session.")
 
+    if st == "lead":
+        return deny("The lead agent is retired: it cost more per ticket than the fixers it ran. "
+                    "Brief the fixers yourself, in one message when their seams are disjoint.")
     if "fable" in model:
         return deny("Subagents never run on Fable. Use fixer-opus, or model 'opus'.")
     if st == "fork":
