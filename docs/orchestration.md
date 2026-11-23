@@ -139,20 +139,8 @@ each turn assigned to the nearest worker; an estimate.
   briefs.
 - Quality could not be compared: 86% of lead-run tickets had no recorded outcome.
 
-What a lead was meant to buy, a small main context, comes cheaper from starting a fresh main
-conversation after each wave (below). `cc-usage report` keeps its "Lead waves" table for this
+`cc-usage report` keeps its "Lead waves" table for this
 history; the agent file is gone and the gate denies `lead`.
-
-## Fresh main sessions
-
-Every main-session turn rereads the whole conversation. Over the same two weeks a main turn
-read a median of about 250k tokens of cache and cost $0.087 on Opus and $0.156 on Fable. That
-reread, not the workers, is the largest line in most sessions. So once the context is past about
-600k tokens (main sessions run with a window of about 1M), at the next point where a wave is merged and checked, the session mentions once, in
-one line, that `/wrap-up` and a new conversation would be cheaper. (A first version also fired
-on every merged wave, which meant nagging at 24k tokens; a 150k threshold was then judged too early; the size threshold is the trigger, the
-wave boundary only picks the moment.) `/wrap-up` records missing outcomes and leaves one "In flight" line per open thread
-in `MEMORY.md`, which the next session loads.
 
 ## Worktree pitfalls
 
