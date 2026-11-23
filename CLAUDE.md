@@ -24,9 +24,10 @@ here.
 - Brief the fixers of a wave in one message when their seams are disjoint, so they run in
   parallel.
 - The main context is the largest cost: every turn rereads all of it, and a Fable turn costs
-  about twice an Opus one. When a wave is merged and checked, or the context passes about 150k
-  tokens, tell the user it is a good point to `/wrap-up` and start a new conversation; the
-  "In flight" lines in `MEMORY.md` carry the thread across.
+  about twice an Opus one. Once the context is past about 150k tokens, at the next point where a
+  wave is merged and checked, say once, in one line, that `/wrap-up` and a new conversation would
+  be cheaper; the "In flight" lines in `MEMORY.md` carry the thread across. Below 150k, keep
+  working. The user decides when to restart.
 - A worker's full report goes to a file; what comes back into the main context is short (the
   outcome, the raw result lines, what was not verified, the file's path).
 - Effort stays at the agent's default; for one hard task pass `effort: high` on the Agent call

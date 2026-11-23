@@ -147,9 +147,11 @@ history; the agent file is gone and the gate denies `lead`.
 
 Every main-session turn rereads the whole conversation. Over the same two weeks a main turn
 read a median of about 250k tokens of cache and cost $0.087 on Opus and $0.156 on Fable. That
-reread, not the workers, is the largest line in most sessions. So when a wave is merged and
-checked, or the context passes about 150k tokens, the session suggests `/wrap-up` and a new
-conversation. `/wrap-up` records missing outcomes and leaves one "In flight" line per open thread
+reread, not the workers, is the largest line in most sessions. So once the context is past about
+150k tokens, at the next point where a wave is merged and checked, the session mentions once, in
+one line, that `/wrap-up` and a new conversation would be cheaper. (A first version also fired
+on every merged wave, which meant nagging at 24k tokens; the size threshold is the trigger, the
+wave boundary only picks the moment.) `/wrap-up` records missing outcomes and leaves one "In flight" line per open thread
 in `MEMORY.md`, which the next session loads.
 
 ## Worktree pitfalls
